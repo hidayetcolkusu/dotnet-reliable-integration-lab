@@ -1,0 +1,29 @@
+# Line endings are part of the build here, not a preference.
+#
+# `dotnet format --verify-no-changes` runs in CI and reads .editorconfig, so git and
+# .editorconfig must agree about end_of_line on EVERY platform. Without this file they do
+# not: a Windows checkout with core.autocrlf=true produces CRLF working files, a Linux CI
+# checkout of the same commit produces LF, and whichever one disagrees with .editorconfig
+# fails the format step with ENDOFLINE on every line of every file.
+#
+# LF is the normalised form: it is what the index already stores, so pinning it here changes
+# no committed bytes - and the bash `run:` blocks in .github/workflows stay LF, where a CR
+# would reach the shell as part of the command.
+* text=auto eol=lf
+
+# Binary content must never be normalised.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.dll binary
+*.exe binary
+*.pfx binary
+*.snk binary
+
+# Generated lock files: kept in the repo on purpose, never hand-edited.
+packages.lock.json -diff

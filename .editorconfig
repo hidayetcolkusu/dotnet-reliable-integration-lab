@@ -11,7 +11,10 @@ root = true
 
 [*]
 charset = utf-8
-end_of_line = crlf
+# LF, matching .gitattributes (`* text=auto eol=lf`). These two files MUST agree: the format
+# check reads this one and the checkout obeys that one, so a mismatch fails CI on Linux while
+# passing on Windows, or the reverse.
+end_of_line = lf
 insert_final_newline = true
 trim_trailing_whitespace = true
 indent_style = space
