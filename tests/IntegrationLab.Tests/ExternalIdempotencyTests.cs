@@ -39,6 +39,7 @@ public sealed class ExternalIdempotencyTests(LabFixture fixture)
     public async Task TheSameOperationKeyAlwaysReturnsTheSameReceipt()
     {
         await _sql.ParkAbandonedJobsAsync();
+        await _sql.CleanupAbandonedOutboxAsync();
 
         await using var erp = await TestFakeErpHost.StartAsync(fixture);
         var requestId = Guid.NewGuid();
@@ -63,6 +64,7 @@ public sealed class ExternalIdempotencyTests(LabFixture fixture)
     public async Task TheSameOperationKeyWithADifferentPayloadIsAConflict()
     {
         await _sql.ParkAbandonedJobsAsync();
+        await _sql.CleanupAbandonedOutboxAsync();
 
         await using var erp = await TestFakeErpHost.StartAsync(fixture);
         var requestId = Guid.NewGuid();
@@ -92,6 +94,7 @@ public sealed class ExternalIdempotencyTests(LabFixture fixture)
     public async Task AnAmountLargerThanTheExternalContractIsAnInvalidPayload(string amountLiteral)
     {
         await _sql.ParkAbandonedJobsAsync();
+        await _sql.CleanupAbandonedOutboxAsync();
 
         await using var erp = await TestFakeErpHost.StartAsync(fixture);
         var requestId = Guid.NewGuid();
@@ -110,6 +113,7 @@ public sealed class ExternalIdempotencyTests(LabFixture fixture)
     public async Task TheLargestAmountTheExternalContractAllowsIsStillApplied()
     {
         await _sql.ParkAbandonedJobsAsync();
+        await _sql.CleanupAbandonedOutboxAsync();
 
         await using var erp = await TestFakeErpHost.StartAsync(fixture);
         var requestId = Guid.NewGuid();
@@ -125,6 +129,7 @@ public sealed class ExternalIdempotencyTests(LabFixture fixture)
     public async Task TheIdempotencyKeyMustAgreeWithTheBody()
     {
         await _sql.ParkAbandonedJobsAsync();
+        await _sql.CleanupAbandonedOutboxAsync();
 
         await using var erp = await TestFakeErpHost.StartAsync(fixture);
         var requestId = Guid.NewGuid();
@@ -142,6 +147,7 @@ public sealed class ExternalIdempotencyTests(LabFixture fixture)
     public async Task ConcurrentIdenticalAppliesProduceOneRowAndOneReceipt()
     {
         await _sql.ParkAbandonedJobsAsync();
+        await _sql.CleanupAbandonedOutboxAsync();
 
         await using var erp = await TestFakeErpHost.StartAsync(fixture);
         var requestId = Guid.NewGuid();
@@ -171,6 +177,7 @@ public sealed class ExternalIdempotencyTests(LabFixture fixture)
     public async Task ALostResponseDoesNotApplyTheOperationTwice()
     {
         await _sql.ParkAbandonedJobsAsync();
+        await _sql.CleanupAbandonedOutboxAsync();
 
         await using var erp = await TestFakeErpHost.StartAsync(fixture);
         await using var api = await TestApiHost.StartAsync(fixture);
@@ -207,6 +214,7 @@ public sealed class ExternalIdempotencyTests(LabFixture fixture)
     public async Task AnUnresponsiveExternalSystemNeverProducesAnEffect()
     {
         await _sql.ParkAbandonedJobsAsync();
+        await _sql.CleanupAbandonedOutboxAsync();
 
         await using var erp = await TestFakeErpHost.StartAsync(fixture);
         await using var api = await TestApiHost.StartAsync(fixture);

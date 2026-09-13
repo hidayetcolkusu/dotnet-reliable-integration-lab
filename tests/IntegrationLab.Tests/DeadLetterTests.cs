@@ -75,6 +75,7 @@ public sealed class DeadLetterTests(LabFixture fixture)
     public async Task ATerminalJobPublishesExactlyOneDeadLetterEventAndOnlyThenIsDeadLettered()
     {
         await _sql.ParkAbandonedJobsAsync();
+        await _sql.CleanupAbandonedOutboxAsync();
 
         await using var broker = await CreateCleanBrokerAsync(fixture);
         await using var erp = await TestFakeErpHost.StartAsync(fixture);
@@ -115,6 +116,7 @@ public sealed class DeadLetterTests(LabFixture fixture)
     public async Task ACrashBetweenDeadLetterConfirmAndUpdateStillClosesTheTerminalState()
     {
         await _sql.ParkAbandonedJobsAsync();
+        await _sql.CleanupAbandonedOutboxAsync();
 
         await using var broker = await CreateCleanBrokerAsync(fixture);
         await using var erp = await TestFakeErpHost.StartAsync(fixture);
@@ -164,9 +166,18 @@ public sealed class DeadLetterTests(LabFixture fixture)
     public async Task AQuarantinedMessageProducesOneDeadLetterEventWithoutItsRawBody()
     {
         await _sql.ParkAbandonedJobsAsync();
+        await _sql.CleanupAbandonedOutboxAsync();
 
         await using var broker = await CreateCleanBrokerAsync(fixture);
         await using var worker = await TestWorkerHost.StartAsync(fixture, null, null, FastArgs());
+
+        // The topology is declared by the worker, and this test publishes straight to the
+        // exchange without mandatory:true. Publishing before the binding exists would be
+        // silently discarded by the broker and the quarantine table would stay empty.
+        await Eventually.UntilAsync(
+            () => broker.HasBindingAsync(broker.ExportQueue, broker.EventsExchange, Topology.ExportRoutingKey),
+            timeout: TimeSpan.FromSeconds(30),
+            diagnostics: () => Task.FromResult("the worker never declared the export binding"));
 
         // A poison body with a distinctive marker: whatever reaches the DLQ must not contain it.
         const string secret = "TOTALLY-SECRET-PAYLOAD-MARKER";
@@ -224,6 +235,7 @@ public sealed class DeadLetterTests(LabFixture fixture)
     public async Task ABrokerOutageDelaysTheDeadLetterEventButNeverLosesIt()
     {
         await _sql.ParkAbandonedJobsAsync();
+        await _sql.CleanupAbandonedOutboxAsync();
 
         // Purged through a handle that is then released: this test stops the broker container,
         // and an AMQP connection held across that restart is closed by the peer and cannot be

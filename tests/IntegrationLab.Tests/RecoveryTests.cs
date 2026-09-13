@@ -29,6 +29,7 @@ public sealed class RecoveryTests(LabFixture fixture)
     public async Task ACrashBetweenTheRequestAndItsOutboxRowLeavesNoAcceptedWorkBehind()
     {
         await _sql.ParkAbandonedJobsAsync();
+        await _sql.CleanupAbandonedOutboxAsync();
 
         var port = LabTestConfig.GetFreeLoopbackPort();
         var requestId = Guid.NewGuid();
@@ -70,6 +71,7 @@ public sealed class RecoveryTests(LabFixture fixture)
     public async Task TheSameRequestIdCanBeRetriedAfterACrashWithoutCreatingASecondExport()
     {
         await _sql.ParkAbandonedJobsAsync();
+        await _sql.CleanupAbandonedOutboxAsync();
 
         var port = LabTestConfig.GetFreeLoopbackPort();
         var requestId = Guid.NewGuid();
@@ -112,6 +114,7 @@ public sealed class RecoveryTests(LabFixture fixture)
     public async Task EveryDependencyFailingAtOnceStillAppliesEachRequestExactlyOnce()
     {
         await _sql.ParkAbandonedJobsAsync();
+        await _sql.CleanupAbandonedOutboxAsync();
 
         await using var erp = await TestFakeErpHost.StartAsync(fixture);
         var requestIds = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid()).ToList();

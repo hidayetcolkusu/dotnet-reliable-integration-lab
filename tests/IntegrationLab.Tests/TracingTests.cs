@@ -64,6 +64,7 @@ public sealed class TracingTests(LabFixture fixture)
     public async Task OneRequestProducesOneTraceAcrossApiOutboxInboxAndTheExternalCall()
     {
         await _sql.ParkAbandonedJobsAsync();
+        await _sql.CleanupAbandonedOutboxAsync();
 
         using var spans = new SpanRecorder();
 
@@ -108,6 +109,7 @@ public sealed class TracingTests(LabFixture fixture)
     public async Task EveryStageTagsTheRequestIdSoATraceCanBeFoundFromABusinessId()
     {
         await _sql.ParkAbandonedJobsAsync();
+        await _sql.CleanupAbandonedOutboxAsync();
 
         using var spans = new SpanRecorder();
 
@@ -153,6 +155,7 @@ public sealed class TracingTests(LabFixture fixture)
     public async Task TraceMetadataTooLargeForItsColumnIsDroppedWithoutStoppingTheWork()
     {
         await _sql.ParkAbandonedJobsAsync();
+        await _sql.CleanupAbandonedOutboxAsync();
 
         await using var broker = await BrokerAssertions.CreateAsync(fixture);
         await using var erp = await TestFakeErpHost.StartAsync(fixture);
@@ -230,6 +233,7 @@ public sealed class TracingTests(LabFixture fixture)
     public async Task AMalformedTraceParentDegradesToAFreshTraceInsteadOfPoisoningTheWork()
     {
         await _sql.ParkAbandonedJobsAsync();
+        await _sql.CleanupAbandonedOutboxAsync();
 
         using var spans = new SpanRecorder();
 
