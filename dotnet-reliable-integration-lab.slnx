@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Integration.Api/Integration.Api.csproj" />
+    <Project Path="src/Integration.Shared/Integration.Shared.csproj" />
+    <Project Path="src/Integration.Worker/Integration.Worker.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/FakeErp/FakeErp.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/IntegrationLab.Tests/IntegrationLab.Tests.csproj" />
+  </Folder>
+</Solution>

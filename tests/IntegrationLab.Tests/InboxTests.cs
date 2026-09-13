@@ -1,0 +1,486 @@
+using System.Data;
+using System.Text;
+using System.Text.Json;
+using Integration.Shared.Contracts;
+using Integration.Shared.Messaging;
+using Integration.Shared.Persistence.Entities;
+using IntegrationLab.Tests.Support;
+using Xunit;
+
+namespace IntegrationLab.Tests;
+
+/// <summary>
+/// Task 5 acceptance: ACK means "durably accepted", never "business done". Every delivery
+/// ends as either (receipt + job) or (quarantine row + dead-letter outbox), and only then is
+/// it ACKed - so a poison message is never silently dropped and never requeued forever.
+/// Duplicates are absorbed by identity, not by luck.
+///
+/// Source requests are seeded straight into SQL rather than through the API, so the ONLY
+/// deliveries on the queue are the ones each test crafts: duplicate counting stays exact.
+/// </summary>
+[Collection("lab")]
+public sealed class InboxTests(LabFixture fixture)
+{
+    private readonly SqlAssertions _sql = fixture.CreateSql();
+
+    /// <summary>
+    /// Consumer-focused worker: the poll loop is fast, but a claimed job parks for an hour
+    /// after its first (ERP-less) attempt, so job churn never competes with these assertions.
+    /// </summary>
+    private static string[] ConsumerWorkerArgs(params string[] extra) =>
+    [
+        "--Lab:PollIntervalMilliseconds=100",
+        .. LabTestConfig.Indexed("Lab:OutboxRetryDelaysSeconds", 0, 0, 0, 0, 0, 0),
+        .. LabTestConfig.Indexed("Lab:JobRetryDelaysSeconds", 3600),
+        .. extra,
+    ];
+
+    /// <summary>
+    /// A broker handle whose export queue starts empty. The queue is shared by the whole
+    /// collection, and a leftover delivery from an earlier test would be counted by the
+    /// duplicate and drain assertions below as if this test had produced it.
+    /// </summary>
+    private async Task<BrokerAssertions> CreateCleanBrokerAsync()
+    {
+        var broker = await BrokerAssertions.CreateAsync(fixture);
+        try
+        {
+            await broker.PurgeQueueAsync(broker.ExportQueue);
+            return broker;
+        }
+        catch
+        {
+            await broker.DisposeAsync();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Starts the consumer and waits until the export binding exists.
+    ///
+    /// The applications declare the topology, and these tests publish straight to the
+    /// exchange without <c>mandatory</c>. Publishing before the binding is declared would
+    /// therefore be silently DISCARDED by the broker, and the test would fail with an empty
+    /// quarantine table for a reason that has nothing to do with the inbox.
+    /// </summary>
+    private async Task<TestWorkerHost> StartConsumerAsync(BrokerAssertions broker, params string[] extra)
+    {
+        var worker = await TestWorkerHost.StartAsync(fixture, null, null, ConsumerWorkerArgs(extra));
+        try
+        {
+            await Eventually.UntilAsync(
+                () => broker.HasBindingAsync(broker.ExportQueue, broker.EventsExchange, Topology.ExportRoutingKey),
+                timeout: TimeSpan.FromSeconds(30),
+                diagnostics: () => Task.FromResult("the worker never declared the export binding"));
+            return worker;
+        }
+        catch
+        {
+            // The caller never received the handle, so nothing else will dispose it. A worker
+            // left running here would publish and claim for the rest of the run.
+            await worker.DisposeAsync();
+            throw;
+        }
+    }
+
+    private static (string Name, SqlDbType Type, object? Value) P(string name, SqlDbType type, object? value) =>
+        (name, type, value);
+
+    private static ExportRequest NewRequest(Guid requestId, string reference = "PO-100", decimal amount = 160.00m) =>
+        new(requestId, reference, amount, "TRY");
+
+    private static string EnvelopeJson(ExportRequest request) => JsonSerializer.Serialize(
+        new ExportEnvelope(
+            request.RequestId,
+            MessageTypes.OrderExportRequested,
+            MessageTypes.SchemaVersion,
+            DateTimeOffset.UtcNow,
+            request),
+        LabJson.Options);
+
+    /// <summary>Seeds the accepted request the inbox's source check requires, without an outbox row.</summary>
+    private async Task SeedSourceRequestAsync(ExportRequest request)
+    {
+        await _sql.ExecuteAsync(
+            useErpDatabase: false,
+            "INSERT INTO ExportRequests (RequestId, PayloadHash, ExternalReference, Amount, Currency, CreatedAtUtc) " +
+            "VALUES (@id, @hash, @reference, @amount, @currency, SYSUTCDATETIME())",
+            P("id", SqlDbType.UniqueIdentifier, request.RequestId),
+            P("hash", SqlDbType.VarChar, PayloadHash.Compute(request)),
+            P("reference", SqlDbType.NVarChar, request.ExternalReference),
+            P("amount", SqlDbType.Decimal, request.Amount),
+            P("currency", SqlDbType.VarChar, request.Currency));
+    }
+
+    private async Task PublishRawAsync(
+        BrokerAssertions broker,
+        string json,
+        string? messageId,
+        string? traceParent = null)
+    {
+        await broker.PublishAsync(
+            broker.EventsExchange,
+            Topology.ExportRoutingKey,
+            Encoding.UTF8.GetBytes(json),
+            messageId,
+            MessageTypes.OrderExportRequested,
+            traceParent);
+    }
+
+    /// <summary>Waits until the queue is empty in both senses: nothing ready, nothing unacknowledged.</summary>
+    private static async Task WaitForQueueDrainedAsync(BrokerAssertions broker) =>
+        await Eventually.UntilAsync(
+            async () =>
+            {
+                var stats = await broker.GetQueueStatsAsync(broker.ExportQueue);
+                return stats is { MessagesReady: 0, MessagesUnacknowledged: 0 };
+            },
+            timeout: TimeSpan.FromSeconds(30),
+            diagnostics: async () =>
+            {
+                var stats = await broker.GetQueueStatsAsync(broker.ExportQueue);
+                return $"queue depth ready={stats.MessagesReady}, unacked={stats.MessagesUnacknowledged}";
+            });
+
+    private Task WaitForQuarantineAsync(string json, string reasonCode)
+    {
+        var bodySha = PayloadHash.OfBytes(Encoding.UTF8.GetBytes(json));
+        return Eventually.UntilAsync(
+            async () => await _sql.GetRejectedReasonAsync(bodySha) == reasonCode,
+            timeout: TimeSpan.FromSeconds(30),
+            diagnostics: async () =>
+                $"body sha256 {bodySha}: rows={await _sql.CountRejectedByBodyShaAsync(bodySha)}, " +
+                $"reason={await _sql.GetRejectedReasonAsync(bodySha) ?? "<none>"}");
+    }
+
+    // ------------------------------------------------------------------ happy path
+
+    [Fact]
+    public async Task ValidDeliveryBecomesOneReceiptAndOneJob()
+    {
+        await _sql.ParkAbandonedJobsAsync();
+
+        var request = NewRequest(Guid.NewGuid());
+        await SeedSourceRequestAsync(request);
+
+        await using var broker = await CreateCleanBrokerAsync();
+        await using var worker = await StartConsumerAsync(broker);
+
+        await PublishRawAsync(broker, EnvelopeJson(request), Guid.NewGuid().ToString());
+
+        await Eventually.UntilAsync(
+            async () => await _sql.CountInboxReceiptsAsync(request.RequestId) == 1,
+            timeout: TimeSpan.FromSeconds(30),
+            diagnostics: () => _sql.DescribeAsync(request.RequestId));
+
+        Assert.Equal(1, await _sql.CountJobsAsync(request.RequestId));
+        await WaitForQueueDrainedAsync(broker);
+    }
+
+    // ------------------------------------------------------------------ duplicates
+
+    [Fact]
+    public async Task SameTransportMessageIdTwiceCreatesNoSecondJob()
+    {
+        await _sql.ParkAbandonedJobsAsync();
+
+        var request = NewRequest(Guid.NewGuid());
+        await SeedSourceRequestAsync(request);
+        var json = EnvelopeJson(request);
+        var transportId = Guid.NewGuid().ToString();
+
+        await using var broker = await CreateCleanBrokerAsync();
+        await using var worker = await StartConsumerAsync(broker);
+
+        await PublishRawAsync(broker, json, transportId);
+        await Eventually.UntilAsync(
+            async () => await _sql.CountInboxReceiptsAsync(request.RequestId) == 1,
+            timeout: TimeSpan.FromSeconds(30),
+            diagnostics: () => _sql.DescribeAsync(request.RequestId));
+
+        // Byte-identical redelivery, as a lost ACK would produce.
+        await PublishRawAsync(broker, json, transportId);
+        await WaitForQueueDrainedAsync(broker);
+
+        // The receipt primary key (ConsumerName, TransportMessageId) absorbed it.
+        Assert.Equal(1, await _sql.CountInboxReceiptsAsync(request.RequestId));
+        Assert.Equal(1, await _sql.CountJobsAsync(request.RequestId));
+    }
+
+    [Fact]
+    public async Task DifferentTransportIdSameEventIdAddsAReceiptButNoSecondJob()
+    {
+        await _sql.ParkAbandonedJobsAsync();
+
+        var request = NewRequest(Guid.NewGuid());
+        await SeedSourceRequestAsync(request);
+        var json = EnvelopeJson(request);
+
+        await using var broker = await CreateCleanBrokerAsync();
+        await using var worker = await StartConsumerAsync(broker);
+
+        // Two transport identities carrying the same business event - what a republish after a
+        // lost confirm looks like when the publisher does NOT reuse the outbox id.
+        await PublishRawAsync(broker, json, Guid.NewGuid().ToString());
+        await PublishRawAsync(broker, json, Guid.NewGuid().ToString());
+
+        await Eventually.UntilAsync(
+            async () => await _sql.CountInboxReceiptsAsync(request.RequestId) == 2,
+            timeout: TimeSpan.FromSeconds(30),
+            diagnostics: () => _sql.DescribeAsync(request.RequestId));
+
+        // Two receipts, but the job is keyed by EventId: the work is created exactly once.
+        Assert.Equal(1, await _sql.CountJobsAsync(request.RequestId));
+        await WaitForQueueDrainedAsync(broker);
+    }
+
+    // ------------------------------------------------------------------ quarantine
+
+    [Fact]
+    public async Task SameEventIdWithDifferentPayloadIsQuarantinedAndLeavesTheJobUntouched()
+    {
+        await _sql.ParkAbandonedJobsAsync();
+
+        var request = NewRequest(Guid.NewGuid(), amount: 160.00m);
+        await SeedSourceRequestAsync(request);
+
+        await using var broker = await CreateCleanBrokerAsync();
+        await using var worker = await StartConsumerAsync(broker);
+
+        await PublishRawAsync(broker, EnvelopeJson(request), Guid.NewGuid().ToString());
+        await Eventually.UntilAsync(
+            async () => await _sql.CountJobsAsync(request.RequestId) == 1,
+            timeout: TimeSpan.FromSeconds(30),
+            diagnostics: () => _sql.DescribeAsync(request.RequestId));
+
+        // Same event identity, different money. The accepted request in SQL is the authority,
+        // so this is caught by the source-hash check - the outer guard in front of the
+        // identity/payload branch that protects an already-created job.
+        var tampered = EnvelopeJson(request with { Amount = 999.00m });
+        await PublishRawAsync(broker, tampered, Guid.NewGuid().ToString());
+
+        await WaitForQuarantineAsync(tampered, RejectionReason.SourceHashMismatch);
+
+        // The original job is never modified and never duplicated, and the tampered delivery
+        // produced no receipt of its own.
+        Assert.Equal(1, await _sql.CountJobsAsync(request.RequestId));
+        Assert.Equal(1, await _sql.CountInboxReceiptsAsync(request.RequestId));
+        await WaitForQueueDrainedAsync(broker);
+    }
+
+    [Fact]
+    public async Task MissingMessageIdIsQuarantinedAndAcked()
+    {
+        await _sql.ParkAbandonedJobsAsync();
+
+        var request = NewRequest(Guid.NewGuid());
+        await SeedSourceRequestAsync(request);
+        var json = EnvelopeJson(request);
+
+        await using var broker = await CreateCleanBrokerAsync();
+        await using var worker = await StartConsumerAsync(broker);
+
+        await PublishRawAsync(broker, json, messageId: null);
+
+        await WaitForQuarantineAsync(json, RejectionReason.MissingMessageId);
+        Assert.Equal(0, await _sql.CountJobsAsync(request.RequestId));
+        await WaitForQueueDrainedAsync(broker);
+    }
+
+    /// <summary>
+    /// G3: a transport identity the receipt key cannot store is a QUARANTINE, not a crash.
+    ///
+    /// The identity is half of the InboxReceipts primary key (varchar(128)). Letting an
+    /// oversized one reach the insert fails the acceptance transaction, which means no ACK,
+    /// which means the broker redelivers the same unstorable message forever - a queue that
+    /// never drains and a worker that never makes progress, with no quarantine row to explain
+    /// it. Truncating instead would be worse: two different deliveries would collide on one key.
+    /// </summary>
+    [Theory]
+    [InlineData(129)]
+    [InlineData(255)]
+    public async Task AnOversizedTransportMessageIdIsQuarantinedAndAckedInsteadOfLoopingForever(int length)
+    {
+        await _sql.ParkAbandonedJobsAsync();
+
+        var request = NewRequest(Guid.NewGuid());
+        await SeedSourceRequestAsync(request);
+        var json = EnvelopeJson(request);
+        var bodySha = PayloadHash.OfBytes(Encoding.UTF8.GetBytes(json));
+        var oversizedId = new string('a', length);
+
+        await using var broker = await CreateCleanBrokerAsync();
+        await using var worker = await StartConsumerAsync(broker);
+
+        await PublishRawAsync(broker, json, oversizedId);
+        await WaitForQuarantineAsync(json, RejectionReason.UnstorableMessageId);
+
+        // Delivered again, exactly as a redelivery would arrive: one rejection, one terminal
+        // event, still no job - and the queue drains rather than cycling the message.
+        await PublishRawAsync(broker, json, oversizedId);
+        await WaitForQueueDrainedAsync(broker);
+
+        var rejectionId = await _sql.GetRejectionIdAsync(bodySha);
+        Assert.NotNull(rejectionId);
+        Assert.Equal(1, await _sql.CountRejectedByBodyShaAsync(bodySha));
+        Assert.Equal(1, await _sql.CountOutboxByRejectionAsync(rejectionId!.Value));
+        Assert.Equal(0, await _sql.CountJobsAsync(request.RequestId));
+        Assert.Equal(0, await _sql.CountInboxReceiptsAsync(request.RequestId));
+    }
+
+    [Fact]
+    public async Task ATransportMessageIdTheReceiptColumnCannotRepresentIsQuarantined()
+    {
+        await _sql.ParkAbandonedJobsAsync();
+
+        var request = NewRequest(Guid.NewGuid());
+        await SeedSourceRequestAsync(request);
+        var json = EnvelopeJson(request);
+
+        await using var broker = await CreateCleanBrokerAsync();
+        await using var worker = await StartConsumerAsync(broker);
+
+        // Non-ASCII in a varchar key: SQL Server substitutes what it cannot map, so the STORED
+        // identity would no longer be the identity that arrived - and two distinct ids could
+        // then land on the same receipt.
+        await PublishRawAsync(broker, json, "mesaj-kimliği-ç-メッセージ");
+
+        await WaitForQuarantineAsync(json, RejectionReason.UnstorableMessageId);
+        await WaitForQueueDrainedAsync(broker);
+        Assert.Equal(0, await _sql.CountJobsAsync(request.RequestId));
+    }
+
+    [Fact]
+    public async Task AnIdentityThatExactlyFillsTheReceiptColumnIsStillAccepted()
+    {
+        // The bound must be the column's, not an arbitrary smaller one: a 128-character
+        // identity is legitimate and must produce ordinary work.
+        await _sql.ParkAbandonedJobsAsync();
+
+        var request = NewRequest(Guid.NewGuid());
+        await SeedSourceRequestAsync(request);
+
+        await using var broker = await CreateCleanBrokerAsync();
+        await using var worker = await StartConsumerAsync(broker);
+
+        await PublishRawAsync(broker, EnvelopeJson(request), new string('b', 128));
+
+        await Eventually.UntilAsync(
+            async () => await _sql.CountInboxReceiptsAsync(request.RequestId) == 1,
+            timeout: TimeSpan.FromSeconds(30),
+            diagnostics: () => _sql.DescribeAsync(request.RequestId));
+        Assert.Equal(1, await _sql.CountJobsAsync(request.RequestId));
+        await WaitForQueueDrainedAsync(broker);
+    }
+
+    [Fact]
+    public async Task MalformedBodyIsQuarantinedNotRequeuedForever()
+    {
+        await _sql.ParkAbandonedJobsAsync();
+
+        const string json = "{ this is not json";
+
+        await using var broker = await CreateCleanBrokerAsync();
+        await using var worker = await StartConsumerAsync(broker);
+
+        await PublishRawAsync(broker, json, Guid.NewGuid().ToString());
+
+        await WaitForQuarantineAsync(json, RejectionReason.MalformedBody);
+
+        // Quarantined THEN acked: the queue drains instead of cycling the poison message.
+        await WaitForQueueDrainedAsync(broker);
+    }
+
+    [Fact]
+    public async Task UnknownTypeIsQuarantined()
+    {
+        await _sql.ParkAbandonedJobsAsync();
+
+        var request = NewRequest(Guid.NewGuid());
+        await SeedSourceRequestAsync(request);
+        var json = EnvelopeJson(request).Replace(
+            $"\"{MessageTypes.OrderExportRequested}\"",
+            "\"SomethingElse\"",
+            StringComparison.Ordinal);
+
+        await using var broker = await CreateCleanBrokerAsync();
+        await using var worker = await StartConsumerAsync(broker);
+
+        await PublishRawAsync(broker, json, Guid.NewGuid().ToString());
+
+        await WaitForQuarantineAsync(json, RejectionReason.UnknownType);
+        Assert.Equal(0, await _sql.CountJobsAsync(request.RequestId));
+        await WaitForQueueDrainedAsync(broker);
+    }
+
+    [Fact]
+    public async Task UnsupportedSchemaVersionIsQuarantined()
+    {
+        await _sql.ParkAbandonedJobsAsync();
+
+        var request = NewRequest(Guid.NewGuid());
+        await SeedSourceRequestAsync(request);
+        var json = EnvelopeJson(request).Replace(
+            $"\"schemaVersion\":{MessageTypes.SchemaVersion}",
+            "\"schemaVersion\":99",
+            StringComparison.Ordinal);
+
+        await using var broker = await CreateCleanBrokerAsync();
+        await using var worker = await StartConsumerAsync(broker);
+
+        await PublishRawAsync(broker, json, Guid.NewGuid().ToString());
+
+        await WaitForQuarantineAsync(json, RejectionReason.UnsupportedSchema);
+        Assert.Equal(0, await _sql.CountJobsAsync(request.RequestId));
+        await WaitForQueueDrainedAsync(broker);
+    }
+
+    [Fact]
+    public async Task EventForAnUnknownSourceRequestIsQuarantined()
+    {
+        await _sql.ParkAbandonedJobsAsync();
+
+        // Deliberately NOT seeded: this lab only accepts events its own API produced.
+        var request = NewRequest(Guid.NewGuid());
+        var json = EnvelopeJson(request);
+
+        await using var broker = await CreateCleanBrokerAsync();
+        await using var worker = await StartConsumerAsync(broker);
+
+        await PublishRawAsync(broker, json, Guid.NewGuid().ToString());
+
+        await WaitForQuarantineAsync(json, RejectionReason.UnknownSourceRequest);
+        Assert.Equal(0, await _sql.CountJobsAsync(request.RequestId));
+        await WaitForQueueDrainedAsync(broker);
+    }
+
+    [Fact]
+    public async Task RepeatedPoisonDeliveryProducesOneQuarantineRowAndOneDeadLetterEvent()
+    {
+        await _sql.ParkAbandonedJobsAsync();
+
+        var json = EnvelopeJson(NewRequest(Guid.NewGuid())).Replace(
+            $"\"{MessageTypes.OrderExportRequested}\"",
+            "\"NotOurType\"",
+            StringComparison.Ordinal);
+        var bodySha = PayloadHash.OfBytes(Encoding.UTF8.GetBytes(json));
+        var transportId = Guid.NewGuid().ToString();
+
+        await using var broker = await CreateCleanBrokerAsync();
+        await using var worker = await StartConsumerAsync(broker);
+
+        await PublishRawAsync(broker, json, transportId);
+        await WaitForQuarantineAsync(json, RejectionReason.UnknownType);
+
+        var rejectionId = await _sql.GetRejectionIdAsync(bodySha);
+        Assert.NotNull(rejectionId);
+
+        // The same poison message again: same transport id, same body, same reason - the
+        // fingerprint must collapse it instead of growing the quarantine and the DLQ.
+        await PublishRawAsync(broker, json, transportId);
+        await WaitForQueueDrainedAsync(broker);
+
+        Assert.Equal(1, await _sql.CountRejectedByBodyShaAsync(bodySha));
+        Assert.Equal(1, await _sql.CountOutboxByRejectionAsync(rejectionId!.Value));
+    }
+}

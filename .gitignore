@@ -1,7 +1,47 @@
-﻿################################################################################
-# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+# dotnet-reliable-integration-lab
 ################################################################################
 
+# Local design/planning notes stay out of the published repo.
 /.serena
 /.vs
 /docs/plan
+/docs/content
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.key
+*.pem
+id_rsa
+id_rsa.*
+
+# Build output
+[Bb]in/
+[Oo]bj/
+artifacts/
+
+# Test output
+TestResults/
+*.trx
+*.coverage
+*.coverlet.json
+*.log
+*.dmp
+
+# IDE / editor local state
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vscode/*
+!.vscode/extensions.json
+
+# Kept on purpose (do not ignore):
+#   packages.lock.json, .config/dotnet-tools.json,
+#   **/Migrations/**, docs/architecture, docs/decisions,
+#   docs/learning, docs/scenarios, results/

@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>IntegrationLab.Tests</RootNamespace>
+    <IsTestProject>true</IsTestProject>
+    <!--
+      xUnit1051 wants every CancellationToken-accepting call to use TestContext's token.
+      These integration tests own their timeouts through Eventually/polling and explicit
+      host lifetimes; propagating runner cancellation through raw AMQP/SQL calls adds
+      noise without changing acceptance behavior, so the rule is disabled here only.
+    -->
+    <NoWarn>$(NoWarn);xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Testcontainers.MsSql" />
+    <PackageReference Include="Testcontainers.RabbitMq" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Integration.Shared\Integration.Shared.csproj" />
+    <ProjectReference Include="..\..\src\Integration.Api\Integration.Api.csproj" />
+    <ProjectReference Include="..\..\src\Integration.Worker\Integration.Worker.csproj" />
+    <ProjectReference Include="..\..\samples\FakeErp\FakeErp.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\config\lab-images.json" Link="lab-images.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\compose.yaml" Link="compose.yaml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

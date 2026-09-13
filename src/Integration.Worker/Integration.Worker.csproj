@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <RootNamespace>Integration.Worker</RootNamespace>
+    <UserSecretsId>dotnet-reliable-integration-lab-worker</UserSecretsId>
+  </PropertyGroup>
+
+  <!-- Microsoft.Extensions.Http and the rest of Microsoft.Extensions.* come from the
+       transitive Microsoft.AspNetCore.App framework reference provided by Integration.Shared. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Integration.Shared\Integration.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

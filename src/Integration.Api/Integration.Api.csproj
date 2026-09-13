@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>Integration.Api</RootNamespace>
+    <UserSecretsId>dotnet-reliable-integration-lab-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Integration.Shared\Integration.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

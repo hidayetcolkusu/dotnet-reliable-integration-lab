@@ -1,0 +1,58 @@
+# Local dependencies only. The API, worker and FakeErp are started with
+# `dotnet run` from separate terminals so their process lifetime is visible.
+#
+# Image digests must match config/lab-images.json. ImageDigestTests verifies this.
+name: dotnet-reliable-integration-lab
+
+services:
+  sql:
+    image: mcr.microsoft.com/mssql/server:2022-latest@sha256:97b448857967be55e005424a660056fe6d51814435804dc07e8f79f028bab5fb
+    container_name: lab-sql
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${LAB_SQL_PASSWORD:?set LAB_SQL_PASSWORD in .env}
+      MSSQL_PID: Developer
+    ports:
+      - "127.0.0.1:${LAB_SQL_PORT:-11433}:1433"
+    volumes:
+      - lab-sql-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  rabbit:
+    image: rabbitmq:4.3.5-management-alpine@sha256:b3b8b7f95f5382a19f9ea33540e604f30aad081d37ad9aba72255135765373a1
+    container_name: lab-rabbit
+    environment:
+      RABBITMQ_DEFAULT_USER: ${LAB_RABBIT_USER:?set LAB_RABBIT_USER in .env}
+      RABBITMQ_DEFAULT_PASS: ${LAB_RABBIT_PASSWORD:?set LAB_RABBIT_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${LAB_RABBIT_PORT:-15672}:5672"
+      - "127.0.0.1:${LAB_RABBIT_MANAGEMENT_PORT:-15673}:15672"
+    volumes:
+      - lab-rabbit-data:/var/lib/rabbitmq
+      - ./config/rabbitmq.conf:/etc/rabbitmq/conf.d/20-lab.conf:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # Optional: docker compose --profile tracing up -d
+  trace-viewer:
+    image: jaegertracing/all-in-one:1.76.0@sha256:ab6f1a1f0fb49ea08bcd19f6b84f6081d0d44b364b6de148e1798eb5816bacac
+    container_name: lab-trace-viewer
+    profiles: ["tracing"]
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "127.0.0.1:${LAB_OTLP_GRPC_PORT:-4317}:4317"
+      - "127.0.0.1:${LAB_JAEGER_UI_PORT:-16686}:16686"
+
+volumes:
+  lab-sql-data:
+  lab-rabbit-data:

@@ -1,0 +1,26 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningLevel>7</WarningLevel>
+    <!--
+      InvariantGlobalization must stay OFF: Microsoft.Data.SqlClient does not support
+      globalization-invariant mode. Culture-sensitive formatting in this repo is always
+      explicit (CultureInfo.InvariantCulture) anyway.
+    -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
+  </PropertyGroup>
+
+  <!-- EF Core scaffolded migrations are generated code; do not fail the build on their style. -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Integration.Shared' OR '$(MSBuildProjectName)' == 'FakeErp'">
+    <NoWarn>$(NoWarn);CS8618</NoWarn>
+  </PropertyGroup>
+
+</Project>

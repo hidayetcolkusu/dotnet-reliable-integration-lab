@@ -1,0 +1,139 @@
+# CI for dotnet-reliable-integration-lab.
+#
+# There are deliberately NO service containers here. The test suite owns its SQL Server and
+# RabbitMQ through Testcontainers, using the digests pinned in config/lab-images.json, so a
+# CI-provided service would be a second, unpinned source of truth for the dependencies.
+#
+# The runner must therefore have a working Docker daemon: ubuntu-latest does.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Integration tests start real containers; two runs of the same ref would fight over
+  # the runner's resources for no benefit.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+  # Testcontainers relies on Docker; fail fast and loudly rather than silently skipping.
+  TESTCONTAINERS_RYUK_DISABLED: 'false'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # global.json pins the SDK with rollForward: disable, so this installs an exact
+      # version and a drifted runner image fails here instead of mid-build.
+      - name: Set up .NET from global.json
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Report versions
+        run: |
+          dotnet --version
+          docker version --format '{{.Server.Version}}'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          # The lock files are the exact input to restore, so they are the exact cache key.
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/packages.lock.json', '.config/dotnet-tools.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore local tools
+        run: dotnet tool restore
+
+      # --locked-mode fails if any packages.lock.json would have to change: an unnoticed
+      # dependency bump is a reproducibility bug, not a convenience.
+      - name: Restore packages (locked)
+        run: dotnet restore --locked-mode
+
+      - name: Build (Release)
+        run: dotnet build -c Release --no-restore
+
+      # Docker must be usable before the suite starts, so a missing daemon is reported as
+      # an infrastructure failure rather than as dozens of failing tests.
+      - name: Verify the Docker daemon is usable
+        run: docker run --rm hello-world
+
+      - name: Pre-pull the pinned dependency images
+        run: |
+          set -euo pipefail
+          for key in sqlServer rabbitMq; do
+            image=$(jq -r ".${key}.pinned" config/lab-images.json)
+            echo "pulling ${image}"
+            docker pull "${image}"
+          done
+
+      - name: Test (Release)
+        run: >
+          dotnet test -c Release --no-build
+          --logger "trx;LogFileName=integration-lab.trx"
+          --logger "console;verbosity=normal"
+          --results-directory TestResults
+
+      - name: Verify formatting
+        # Runs even when tests fail: a formatting problem should be reported in the same
+        # run, not discovered only after the tests are fixed.
+        if: ${{ !cancelled() }}
+        run: dotnet format --verify-no-changes --no-restore --verbosity minimal
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/*.trx
+          if-no-files-found: error
+          retention-days: 14
+
+  scripts:
+    # The PowerShell scripts are parsed and their help is checked on every run. They are not
+    # EXECUTED here: they drive `docker compose` and a local .env, which is a developer-machine
+    # workflow, and pretending otherwise in CI would prove nothing.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Parse the lab scripts
+        shell: pwsh
+        # Parsing only. These scripts drive `docker compose` and a developer's local .env,
+        # which is a workstation workflow; running them here would prove nothing about CI.
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $failed = $false
+          foreach ($file in Get-ChildItem -Path scripts -Filter *.ps1) {
+              $errors = $null
+              [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$null, [ref]$errors) | Out-Null
+              if ($errors.Count -gt 0) {
+                  $failed = $true
+                  Write-Host "::error file=$($file.FullName)::$($errors.Count) parse error(s)"
+                  $errors | ForEach-Object { Write-Host "  $($_.Extent.StartLineNumber): $($_.Message)" }
+              }
+              else {
+                  Write-Host "ok  $($file.Name)"
+              }
+          }
+          if ($failed) { exit 1 }
