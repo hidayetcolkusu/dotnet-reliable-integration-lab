@@ -5,7 +5,7 @@ This file keeps every acceptance run, newest first. An older run is evidence of 
 
 | Run | Tests | What it covered |
 |---|---|---|
-| 2026-10-04 (2) | 189 passed, 0 failed (fresh clone of `686d6cc`) | the release commit: the quarantine race fix, the two delivery-race tests, the launch-profile fix |
+| 2026-10-04 (2) | 189 passed, 0 failed (fresh clone of `686d6cc`) | the release commit: the quarantine race fix, the two delivery-race tests, the launch-profile fix; remote CI green on `b37263e` (189/189) |
 | 2026-10-04 | 182 passed, 0 failed (fresh clone of `c94ac50`); 186 passed, 0 failed with the launch-profile fix | the first run pinned to a commit: a fresh clone, the README setup path, `broker-down`; remote CI green on the same commit |
 | 2026-09-13 | 182 passed, 0 failed | after the gap remediation (G1–G8) |
 | 2026-09-11 | 98 passed, 0 failed | the first full run, before the remediation |
@@ -76,8 +76,25 @@ The same chain on the development tree before the commit: 189 passed, exit code 
   `ScriptTests.DotnetRunStartsEachAppInDevelopmentOnItsDocumentedUrl` and
   `ScriptTests.TheWorkerCallsFakeErpWhereFakeErpListensByDefault`. The last time the path itself
   ran end to end is the run below.
-- **Remote CI on this commit.** The commit had not been pushed when this was recorded, so no
-  CI run covers it here. The last green CI run is still the one on `c94ac50`, below.
+
+## Remote CI
+
+**Green on `b37263e`** (this commit plus the commit that recorded this run, which changes only
+this file). Read on 2026-10-04 with `gh run view` and `gh run view --log`, as the repository owner.
+
+| | |
+|---|---|
+| Run | [37207068481](https://github.com/hidayetcolkusu/dotnet-reliable-integration-lab/actions/runs/37207068481), workflow `ci`, event `push` |
+| Commit | `b37263e` (`main`) |
+| Time | 2026-10-04, about 13:50–13:54 UTC |
+| Conclusion | **success**: `scripts` success, `build-and-test` success (3 min 41 s) |
+| Runner | `ubuntu-latest` |
+| Build | 0 warnings |
+| Tests | **Total tests: 189, Passed: 189**, 2.42 min; the job pre-pulled the same SQL Server and RabbitMQ digests listed above |
+| Format | `dotnet format --verify-no-changes` passed |
+
+The run's annotations are platform notices only (Node.js 20 actions forced onto Node.js 24;
+`ubuntu-latest` moving to Ubuntu 26), not failures.
 
 ---
 

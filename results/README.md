@@ -10,10 +10,12 @@ Rules these files follow:
   produces alarming log lines on purpose; those are not defects.
 - **No performance claims.** Nothing here measures throughput, latency percentiles or loss
   rates, so none are stated.
-- **CI claims are tied to a run.** The only CI claim is
-  [run 34765658412](https://github.com/hidayetcolkusu/dotnet-reliable-integration-lab/actions/runs/34765658412):
-  green on `c94ac50`, 182/182 on `ubuntu-24.04`. It is recorded, along with the red runs
-  before it, in [verification.md](verification.md). Every other result here was run locally,
+- **CI claims are tied to a run.** The CI claims are
+  [run 37207068481](https://github.com/hidayetcolkusu/dotnet-reliable-integration-lab/actions/runs/37207068481)
+  (green on `b37263e`, 189/189) and
+  [run 34765658412](https://github.com/hidayetcolkusu/dotnet-reliable-integration-lab/actions/runs/34765658412)
+  (green on `c94ac50`, 182/182 on `ubuntu-24.04`). Both are recorded, along with the red runs
+  before them, in [verification.md](verification.md). Every other result here was run locally,
   on one machine.
 
 | File | What it records |
