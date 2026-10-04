@@ -516,7 +516,7 @@ public sealed partial class FailureWindowTests(LabFixture fixture)
         Assert.Equal(1, await _sql.CountAppliedExportsAsync(request.RequestId));
         Assert.Equal(await _sql.GetAppliedReceiptAsync(request.RequestId), afterLateWrite.ExternalReceiptId);
 
-        // G5: exactly one attempt is Succeeded, and no attempt is left open on a Completed job.
+        // exactly one attempt is Succeeded, and no attempt is left open on a Completed job.
         var attempts = await _sql.GetJobAttemptsAsync(request.RequestId);
         Assert.Single(attempts, attempt => attempt.Outcome == AttemptOutcome.Succeeded);
         Assert.DoesNotContain(attempts, attempt => attempt.Outcome == AttemptOutcome.Started);

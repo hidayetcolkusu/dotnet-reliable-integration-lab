@@ -13,7 +13,7 @@ using WorkerProgram = Integration.Worker.Program;
 namespace IntegrationLab.Tests;
 
 /// <summary>
-/// G2: one external attempt gets ONE budget, and it covers the whole attempt.
+/// one external attempt gets ONE budget, and it covers the whole attempt.
 ///
 /// <c>HttpClient.Timeout</c> cannot express that. Under
 /// <c>HttpCompletionOption.ResponseHeadersRead</c> its timer stops the moment the response
@@ -200,7 +200,7 @@ public sealed class ErpAttemptBudgetTests
     private static string ReceiptBody(string receiptId = "ERP-0001") =>
         $$"""{"receiptId":"{{receiptId}}"}""";
 
-    // -------------------------------------------------------------------- the G2 defect
+    // ---------------------------------------------------- headers before a stalled body
 
     [Fact]
     public async Task HeadersThatArriveBeforeAStalledBodyDoNotEscapeTheAttemptBudget()

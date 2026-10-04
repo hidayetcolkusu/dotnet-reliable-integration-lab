@@ -6,7 +6,7 @@ namespace Integration.Shared.Runtime;
 
 /// <summary>
 /// The lab's web applications are unauthenticated and expose control endpoints. A loopback
-/// DEFAULT is not the guarantee the plan asks for: <c>--urls</c>, <c>ASPNETCORE_URLS</c>,
+/// DEFAULT is not the guarantee the lab needs: <c>--urls</c>, <c>ASPNETCORE_URLS</c>,
 /// <c>ASPNETCORE_HTTP_PORTS</c> and a <c>Kestrel:Endpoints</c> section all override that
 /// default silently, and any of them can put the process on a real network interface.
 ///

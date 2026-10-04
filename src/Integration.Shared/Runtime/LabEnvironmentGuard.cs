@@ -11,7 +11,7 @@ public static class LabEnvironmentGuard
     public static readonly string[] AllowedEnvironments = ["Development", "Testing"];
 
     /// <summary>
-    /// The ONLY environment in which fault injection is composed. The plan draws this line at
+    /// The ONLY environment in which fault injection is composed. The lab draws this line at
     /// the test harness on purpose: a `crash` fault is a hard <c>Environment.Exit</c>, and a
     /// developer running the lab normally (Development) must not be able to arm one through a
     /// stray configuration value. Tests and the scripted crash scenarios pass

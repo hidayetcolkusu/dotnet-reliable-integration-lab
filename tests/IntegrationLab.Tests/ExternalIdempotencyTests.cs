@@ -84,7 +84,7 @@ public sealed class ExternalIdempotencyTests(LabFixture fixture)
     }
 
     /// <summary>
-    /// G4 on the external side. The ERP stores decimal(18,2) too, so an amount past that bound
+    /// The same bound on the external side. The ERP stores decimal(18,2) too, so an amount past that bound
     /// has to meet the documented invalid-payload contract rather than an arithmetic overflow
     /// at insert time - and it must leave no AppliedExports row behind.
     /// </summary>

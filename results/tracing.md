@@ -1,8 +1,8 @@
 # One request, one trace
 
-> Recorded on 2026-09-11, before the repository had any commit (the first one is `8260ae8`,
-> 2026-09-13). The newest run pinned to a commit, from a fresh clone, is at the top of
-> [verification.md](verification.md).
+> A focused run recorded on 2026-09-11, during development and before the first commit, so
+> the counts below are those of that date. The current, commit-pinned run of the whole suite
+> is in [verification.md](verification.md).
 
 ## Environment
 
@@ -12,7 +12,7 @@
 | .NET SDK | 10.0.400 |
 | OpenTelemetry | ASP.NET Core + HttpClient instrumentation, optional OTLP exporter |
 | Trace viewer | `jaegertracing/all-in-one:1.76.0@sha256:ab6f1a1f…` (optional compose profile) |
-| Commit | none yet — the tree is not committed at the time of this run |
+| Commit | none (development tree, before the first commit) |
 
 ## Command
 

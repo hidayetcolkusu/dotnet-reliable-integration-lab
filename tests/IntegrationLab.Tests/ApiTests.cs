@@ -309,7 +309,7 @@ public sealed class ApiTests(LabFixture fixture)
     }
 
     /// <summary>
-    /// G4: the durable column is decimal(18,2), and the contract has to say so at the edge.
+    /// the durable column is decimal(18,2), and the contract has to say so at the edge.
     /// A larger CLR decimal used to pass "positive, two decimals" and then fail as a SQL
     /// arithmetic overflow inside the acceptance transaction - a 500 where the API's own error
     /// contract promises a safe, field-level 400, and an exception text where a reason code

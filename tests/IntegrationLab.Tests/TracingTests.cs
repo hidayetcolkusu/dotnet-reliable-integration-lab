@@ -143,7 +143,7 @@ public sealed class TracingTests(LabFixture fixture)
     }
 
     /// <summary>
-    /// G3: trace metadata that cannot be stored is degraded, never fatal.
+    /// trace metadata that cannot be stored is degraded, never fatal.
     ///
     /// A tracestate longer than its column (256) and a tracestate arriving WITHOUT a parent are
     /// both realistic on a wire this lab does not control. Either one reaching an INSERT ends

@@ -1,8 +1,8 @@
 # Broker outage, unroutable publish, confirm timeout, crash after confirm
 
-> Recorded on 2026-09-11, before the repository had any commit (the first one is `8260ae8`,
-> 2026-09-13). The newest run pinned to a commit, from a fresh clone, is at the top of
-> [verification.md](verification.md).
+> A focused run recorded on 2026-09-11, during development and before the first commit, so
+> the counts below are those of that date. The current, commit-pinned run of the whole suite
+> is in [verification.md](verification.md).
 
 ## Environment
 
@@ -14,7 +14,7 @@
 | OS | Windows 11 Pro, build 10.0.26200.9445 |
 | RabbitMQ | `rabbitmq:4.3.5-management-alpine@sha256:b3b8b7f9…` |
 | RabbitMQ.Client | 7.2.2 |
-| Commit | none yet — the tree is not committed at the time of this run |
+| Commit | none (development tree, before the first commit) |
 
 ## Command
 

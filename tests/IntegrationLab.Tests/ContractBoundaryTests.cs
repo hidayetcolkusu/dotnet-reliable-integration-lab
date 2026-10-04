@@ -36,7 +36,7 @@ public sealed class ContractBoundaryTests
         return Encoding.UTF8.GetBytes(json);
     }
 
-    // ------------------------------------------------------- transport identity limits (G3)
+    // ------------------------------------------------------- transport identity limits
 
     [Fact]
     public void AnIdentityThatExactlyFillsTheColumnIsAccepted()
@@ -90,7 +90,7 @@ public sealed class ContractBoundaryTests
             Validator.Validate("   ", ValidEnvelope(Guid.NewGuid())).ReasonCode);
     }
 
-    // ------------------------------------------------------------------ amount limits (G4)
+    // ------------------------------------------------------------------ amount limits
 
     [Fact]
     public void TheLargestStorableAmountIsAccepted()
@@ -123,7 +123,7 @@ public sealed class ContractBoundaryTests
         Assert.True(ExportLimits.IsStorableAmount(160.00m));
     }
 
-    // ------------------------------------------------------------------- trace context (G3)
+    // ------------------------------------------------------------------- trace context
 
     private static IReadOnlyBasicProperties WithTrace(string? traceParent, string? traceState)
     {

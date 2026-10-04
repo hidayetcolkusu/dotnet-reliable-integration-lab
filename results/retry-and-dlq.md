@@ -1,8 +1,8 @@
 # Retry budget, external idempotency and dead-lettering
 
-> Recorded on 2026-09-11, before the repository had any commit (the first one is `8260ae8`,
-> 2026-09-13). The newest run pinned to a commit, from a fresh clone, is at the top of
-> [verification.md](verification.md).
+> A focused run recorded on 2026-09-11, during development and before the first commit, so
+> the counts below are those of that date. The current, commit-pinned run of the whole suite
+> is in [verification.md](verification.md).
 
 ## Environment
 
@@ -12,7 +12,7 @@
 | .NET SDK | 10.0.400 |
 | Docker | 29.6.1 |
 | OS | Windows 11 Pro, build 10.0.26200.9445 |
-| Commit | none yet — the tree is not committed at the time of this run |
+| Commit | none (development tree, before the first commit) |
 
 ## Command
 

@@ -78,9 +78,9 @@ public sealed class CompositionTests
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<ApplyExportHandler>());
     }
 
-    // ---------------------------------------------------------------- loopback boundary (G1)
+    // ---------------------------------------------------------------- loopback boundary
     //
-    // The plan's boundary is "loopback only", not "loopback by default". A default is what the
+    // The boundary is "loopback only", not "loopback by default". A default is what the
     // host uses when nothing else is configured; --urls, ASPNETCORE_URLS, ASPNETCORE_HTTP_PORTS
     // and a Kestrel:Endpoints section all replace it silently. These tests assert the boundary
     // at CONFIGURATION time, so nothing ever binds a real interface to prove the point.
@@ -195,14 +195,14 @@ public sealed class CompositionTests
         Assert.True(LoopbackGuard.IsLoopbackUrl(FakeErpProgram.DefaultLoopbackUrl, out _));
     }
 
-    // ------------------------------------------------------------- fault-hook boundary (G8)
+    // ------------------------------------------------------------- fault-hook boundary
 
     [Theory]
     [InlineData("Development")]
     [InlineData("development")]
     public void FaultHooksAreNotComposedOutsideTesting(string environment)
     {
-        // The plan scopes fault injection to the test harness. A `crash` fault is a hard
+        // Fault injection is scoped to the test harness. A `crash` fault is a hard
         // Environment.Exit, so a value left in a developer's configuration must be inert.
         using var host = WorkerProgram.BuildHost(
         [

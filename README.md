@@ -1,5 +1,14 @@
 # dotnet-reliable-integration-lab
 
+[![ci](https://github.com/hidayetcolkusu/dotnet-reliable-integration-lab/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hidayetcolkusu/dotnet-reliable-integration-lab/actions/workflows/ci.yml)
+![.NET 10](https://img.shields.io/badge/.NET-10.0.400-512BD4)
+
+A .NET 10 lab for getting one business request applied in an external system despite
+failures at every boundary: transactional outbox and durable inbox over SQL Server, RabbitMQ
+publisher confirms, SQL-backed retries with lease ownership, external idempotency keys,
+quarantine and dead-lettering, and one trace across processes. Every claim is tested against
+real SQL Server and RabbitMQ containers.
+
 > **Türkçe özet.** Bu repo, bir iş kaydının bir dış sisteme ulaştırılmasının neden zor olduğunu
 > ve .NET ile nasıl **ele alındığını** çalıştırılabilir biçimde gösterir. Veritabanı, mesaj
 > kuyruğu ve HTTP sınırlarının her biri ayrı ayrı bozulabilir; hiçbiri diğeriyle aynı transaction
@@ -39,6 +48,19 @@ of that one gap.
 This lab is deliberately small — one synthetic request type — so that all of its surface area
 is spent on failure handling rather than on a domain model.
 
+## What is guaranteed, and what is not
+
+| Guaranteed (and tested) | Deliberately not guaranteed |
+|---|---|
+| a `202` means the request and its outbox row committed together; a broker outage delays the publish, it does not drop it | exactly-once delivery: the wire is **at-least-once**, duplicates are normal |
+| `Published` only after a confirmed **and routed** publish | ordering: retries and concurrent dispatchers reorder freely |
+| a duplicate delivery never creates a second job (durable inbox, ACK after commit) | high availability: one broker node, one SQL instance |
+| the retry budget survives a hard kill (attempts are SQL columns, leases recover rows) | an "applied once" effect against a third party that offers no idempotency key |
+| a lost response does not apply the operation twice (external idempotency key) | the open windows in [failure windows](docs/architecture/failure-windows.md), e.g. a SQL failover mid-transaction |
+| poison or exhausted work is quarantined and dead-lettered, never dropped or looped | reprocessing of quarantined messages, retention, authentication |
+
+The full list is under [Limits](#limits).
+
 ## What it demonstrates
 
 | Claim | Where it is proven |
@@ -56,6 +78,19 @@ is spent on failure handling rather than on a domain model.
 | A value the database cannot store is quarantined, not retried forever | `InboxTests`, `TracingTests`, `ContractBoundaryTests` |
 | The API and FakeErp refuse to bind anything but loopback | `CompositionTests` |
 | One request is one trace, across process boundaries | `TracingTests` |
+
+## Verified state
+
+| | |
+|---|---|
+| Tests | **189 passed, 0 failed**: the whole suite, against real SQL Server and RabbitMQ containers |
+| Command | `pwsh -File scripts/verify-clean.ps1` (tool restore → locked restore → Release build → tests → format check) |
+| Format | `dotnet format --verify-no-changes`: clean |
+| CI | GitHub Actions on `ubuntu-latest`, green on `main` |
+| Local | fresh clone on Windows 11, PowerShell 7.6.6, Docker 29.6.1 |
+
+The commit, the CI run and the image digests are recorded in
+[results/verification.md](results/verification.md).
 
 ## Architecture
 
@@ -125,7 +160,8 @@ rebuild cannot erase a business retry policy. See
   characters deep, the native SQL client library in each app's `bin` exceeds the 260-character
   path limit, and the crash/restart tests that start the apps as child processes fail with
   `DllNotFoundException … (0x800700CE)`
-- Verified on Windows 11 with PowerShell 7.6.6 and Docker 29.6.1. No other platform has been tried.
+- Verified locally on Windows 11 (PowerShell 7.6.6, Docker 29.6.1); CI runs the suite on
+  `ubuntu-latest`. No other platform has been tried.
 
 ## Setup
 
@@ -293,6 +329,9 @@ run that executed nothing is not a pass.
 | `DeadLetterTests` | terminal state, confirmed DLQ publish, payload safety |
 | `TracingTests` | one trace across API, outbox, inbox and the external call |
 | `RecoveryTests` | all of the above failing at once |
+| `FailureWindowTests` | each named window between a commit and the act that follows it |
+| `ErpAttemptBudgetTests` | one deadline for the whole external attempt, body included, on a real socket |
+| `ContractBoundaryTests` | identity, trace-metadata and amount limits at the edges |
 | `ScriptTests` | the setup scripts, pinned digests, documented commands |
 | `CompositionTests` | each application's DI graph under Development validation |
 

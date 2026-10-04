@@ -5,7 +5,7 @@
     native exit-code checking and process lifetime.
 
 .NOTES
-    PowerShell 7 only. These scripts have been run on Windows 11 with PowerShell 7.5;
+    PowerShell 7 only. These scripts have been run on Windows 11 with PowerShell 7.6;
     they use no Windows-only API, but no other platform has been verified, so no
     cross-platform claim is made in the README.
 #>

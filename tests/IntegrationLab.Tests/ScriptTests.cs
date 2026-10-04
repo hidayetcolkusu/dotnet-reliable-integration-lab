@@ -351,7 +351,7 @@ public sealed partial class ScriptTests
 
     // ------------------------------------------------------------------ demo isolation
     //
-    // G6: a prefix on the broker topology is NOT isolation. The scenarios also claim outbox
+    // a prefix on the broker topology is NOT isolation. The scenarios also claim outbox
     // rows and jobs, and those claims take every due row in the database they are pointed at.
     // These tests pin the properties that make a demo safe to run next to your own apps.
 

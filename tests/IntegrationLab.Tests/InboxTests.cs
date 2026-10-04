@@ -298,7 +298,7 @@ public sealed class InboxTests(LabFixture fixture)
     }
 
     /// <summary>
-    /// G3: a transport identity the receipt key cannot store is a QUARANTINE, not a crash.
+    /// a transport identity the receipt key cannot store is a QUARANTINE, not a crash.
     ///
     /// The identity is half of the InboxReceipts primary key (varchar(128)). Letting an
     /// oversized one reach the insert fails the acceptance transaction, which means no ACK,
