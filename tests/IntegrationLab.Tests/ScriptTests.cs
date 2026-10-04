@@ -528,6 +528,46 @@ public sealed partial class ScriptTests
         }
     }
 
+    /// <summary>
+    /// `dotnet run` applies Properties/launchSettings.json. A profile's applicationUrl would
+    /// override each app's DefaultLoopbackUrl - the API would leave the README's 5099 and
+    /// FakeErp the worker's ErpBaseAddress - and an app without a profile starts as
+    /// Production, which the environment guard refuses. Found by a fresh-clone run of the
+    /// README setup, where nothing else sets the environment.
+    /// </summary>
+    [Theory]
+    [InlineData("src/Integration.Api", "ASPNETCORE_ENVIRONMENT")]
+    [InlineData("src/Integration.Worker", "DOTNET_ENVIRONMENT")]
+    [InlineData("samples/FakeErp", "ASPNETCORE_ENVIRONMENT")]
+    public void DotnetRunStartsEachAppInDevelopmentOnItsDocumentedUrl(string project, string environmentVariable)
+    {
+        var path = Path.Combine(RepositoryRoot, project.Replace('/', Path.DirectorySeparatorChar), "Properties", "launchSettings.json");
+        Assert.True(File.Exists(path), $"{project} has no launchSettings.json, so `dotnet run` starts it as Production.");
+
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        foreach (var profile in document.RootElement.GetProperty("profiles").EnumerateObject())
+        {
+            Assert.False(
+                profile.Value.TryGetProperty("applicationUrl", out _),
+                $"{project} profile '{profile.Name}' sets applicationUrl, which overrides the app's DefaultLoopbackUrl.");
+            Assert.Equal(
+                "Development",
+                profile.Value.GetProperty("environmentVariables").GetProperty(environmentVariable).GetString());
+        }
+    }
+
+    [Fact]
+    public void TheWorkerCallsFakeErpWhereFakeErpListensByDefault()
+    {
+        Assert.Equal(FakeErp.Program.DefaultLoopbackUrl, new Integration.Shared.Runtime.LabOptions().ErpBaseAddress);
+
+        using var settings = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(RepositoryRoot, "src", "Integration.Worker", "appsettings.json")));
+        Assert.Equal(
+            FakeErp.Program.DefaultLoopbackUrl,
+            settings.RootElement.GetProperty("Lab").GetProperty("ErpBaseAddress").GetString());
+    }
+
     [GeneratedRegex(@"(?:src|samples|tests)/[A-Za-z.]+/[A-Za-z.]+\.csproj")]
     private static partial Regex ProjectPathPattern();
 

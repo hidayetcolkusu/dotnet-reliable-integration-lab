@@ -28,7 +28,7 @@ killed with no graceful shutdown. A replacement worker with a short retry wait t
 ==> Killing the worker hard (no graceful shutdown)
     [requestId=...] the durable counter survived the kill: attempts=1
 ==> Starting a replacement worker
-    [requestId=...] continued from attempt 1 to 3 and applied exactly once: ... job=Completed/attempts=3 ... applied=1
+    [requestId=...] continued from attempt 1 to 3 and applied once: ... job=Completed/attempts=3 ... applied=1
 ```
 
 `attempts=1` before and `attempts=3` after is the evidence that the budget continued rather
@@ -71,7 +71,7 @@ opens a sixth external call. That is
 - `JobRetryTests.ACrashInsideAnAttemptStillConsumesThatAttempt` (a real child process, killed
   by an injected fault at the claim boundary)
 - `OutboxTests.StaleLeaseOwnerCannotMarkPublished` for the publish side of the same rule
-- `RecoveryTests.EveryDependencyFailingAtOnceStillAppliesEachRequestExactlyOnce`, which
+- `RecoveryTests.EveryDependencyFailingAtOnceStillAppliesEachRequestOnce`, which
   combines a broker outage, a hard kill and external failures in one run
 
 ## What this does not prove

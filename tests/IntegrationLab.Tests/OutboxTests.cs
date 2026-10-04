@@ -381,7 +381,7 @@ public sealed class OutboxTests(LabFixture fixture)
     }
 
     [Fact]
-    public async Task TwoWorkersPublishEveryRowExactlyOnce()
+    public async Task TwoCompetingWorkersPublishEachRowOnce()
     {
         await ResetOutboxAsync();
 

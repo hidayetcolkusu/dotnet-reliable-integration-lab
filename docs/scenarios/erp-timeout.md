@@ -31,7 +31,7 @@ worker runs with a 2-second HTTP timeout.
 ```text
     [requestId=...] FakeErp will commit the effect and then lose the response
 ==> Starting the worker with a 2s HTTP timeout
-    [requestId=...] retried 2 times, applied exactly once: outbox=Published, job=Completed/attempts=2, receipts=1, applied=1
+    [requestId=...] retried 2 times, applied once: outbox=Published, job=Completed/attempts=2, receipts=1, applied=1
 ```
 
 `attempts=2` and `applied=1` together are the evidence. The first attempt is recorded as a

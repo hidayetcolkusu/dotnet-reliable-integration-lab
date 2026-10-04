@@ -2,7 +2,7 @@
 
 ## The problem this repository is about
 
-One business request has to reach an external system exactly once, across a database, a
+One business request has to take effect in an external system once, across a database, a
 message broker, an HTTP hop and an arbitrary number of process restarts. Every one of those
 boundaries can fail independently, and none of them can be made transactional with the others.
 

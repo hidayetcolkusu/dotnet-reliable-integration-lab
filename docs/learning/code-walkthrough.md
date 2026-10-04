@@ -176,7 +176,7 @@ pwsh -File scripts/run-scenario.ps1 -Scenario worker-restart
 ```text
     [requestId=...] before the kill: ... job=RetryScheduled/attempts=1 ...
     [requestId=...] the durable counter survived the kill: attempts=1
-    [requestId=...] continued from attempt 1 to 3 and applied exactly once: ... applied=1
+    [requestId=...] continued from attempt 1 to 3 and applied once: ... applied=1
 ```
 
 **Dikkat edilecek nokta:** Sayaç **claim ile aynı transaction'da** artar. Bu yüzden çağrının
@@ -220,7 +220,7 @@ pwsh -File scripts/run-scenario.ps1 -Scenario erp-timeout
 **Beklenen çıktı:**
 
 ```text
-    [requestId=...] retried 2 times, applied exactly once: ... job=Completed/attempts=2 ... applied=1
+    [requestId=...] retried 2 times, applied once: ... job=Completed/attempts=2 ... applied=1
 ```
 
 **Dikkat edilecek nokta:** `attempts=2` **ve** `applied=1` birlikte kanıttır. Tek başına

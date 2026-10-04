@@ -224,7 +224,7 @@ public sealed partial class FailureWindowTests(LabFixture fixture)
             diagnostics: () => _sql.DescribeAsync(request.RequestId));
 
         // The redelivery produced no second receipt and no second job - "at least once" on the
-        // wire, exactly once in the work.
+        // wire, one job in SQL.
         Assert.Equal(1, await _sql.CountInboxReceiptsAsync(request.RequestId));
         Assert.Equal(1, await _sql.CountJobsAsync(request.RequestId));
         Assert.Equal(1, await _sql.CountAppliedExportsAsync(request.RequestId));
@@ -464,7 +464,7 @@ public sealed partial class FailureWindowTests(LabFixture fixture)
     ///
     /// The late write must change nothing - not the job state, not the receipt, and not the
     /// attempt history of the owner that actually did the work. And however many workers raced,
-    /// the external system was affected exactly once.
+    /// the external system holds one applied row.
     /// </summary>
     [Fact]
     public async Task ALateResultFromAnExpiredOwnerCannotOverwriteTheCurrentOwnersOutcome()

@@ -23,7 +23,7 @@ behind in a developer's settings cannot crash or stall a normal run
 | 3 | broker confirmed, SQL not yet updated | `outbox.after-confirm-before-update` | the row stays `Publishing`, is republished with the **same** message id, and the duplicate delivery collapses to one job | `OutboxTests.CrashAfterConfirmRepublishesTheSameTransportMessageId` |
 | 4 | inbox transaction committed, ACK not sent | `inbox.after-commit-before-ack` (`crash`, child process) | the broker redelivers; the existing receipt absorbs it; one receipt, one job, and the queue drains | `FailureWindowTests.AHardStopBetweenTheInboxCommitAndTheAckIsAbsorbedByTheExistingReceipt` |
 | 5 | consumer holds a delivery, SQL is unreachable | a loopback TCP gate in front of SQL Server is closed, then reopened | nothing durable, therefore nothing ACKed; the consumer backs off; the same delivery is accepted when SQL returns | `FailureWindowTests.AConsumerThatCannotReachSqlNeverAcksAndRecoversWhenSqlReturns` |
-| 6 | delivery ACKed, job not yet processed | `job.after-claim` (`delay`), then a bounded stop | the broker holds nothing at all; the work lives only in SQL and a restart finishes it exactly once | `FailureWindowTests.WorkAckedButNotYetProcessedSurvivesAWorkerStopWithAnEmptyBroker` |
+| 6 | delivery ACKed, job not yet processed | `job.after-claim` (`delay`), then a bounded stop | the broker holds nothing at all; the work lives only in SQL and a restart finishes it with one external effect | `FailureWindowTests.WorkAckedButNotYetProcessedSurvivesAWorkerStopWithAnEmptyBroker` |
 | 7 | job claimed, external call not started | `job.after-claim` (`crash`, child process) | the attempt is already spent; the row is `Processing` until the lease expires | `JobRetryTests.ACrashInsideAnAttemptStillConsumesThatAttempt` |
 | 8 | external call answered, job row knows nothing | `job.after-http-before-update` | the outcome is unknown, so the retry replays against the external idempotency key | `ExternalIdempotencyTests.ALostResponseDoesNotApplyTheOperationTwice` |
 | 9 | the external system restarts after committing | FakeErp killed hard and restarted on the same address and database | the same operation key answers with the same receipt and leaves one row — idempotency is durable, not a process cache | `FailureWindowTests.TheExternalSystemStillReplaysTheSameReceiptAfterAProcessRestart` |
@@ -43,6 +43,19 @@ transaction — which means no ACK, which means the same message forever:
   (`InboxTests.AnOversizedTransportMessageIdIsQuarantinedAndAckedInsteadOfLoopingForever`);
 - trace metadata past its column, or a `tracestate` with no parent, is dropped rather than
   stored (`TracingTests.TraceMetadataTooLargeForItsColumnIsDroppedWithoutStoppingTheWork`).
+
+Two deliveries can also be accepted *at the same time*: both read "no receipt, no job" and race
+on a unique key. The database decides the winner; the loser resolves the conflict instead of
+failing blindly. Each test commits the winner from a second connection just before the
+loser's insert, so the race is forced on every run rather than hoped for:
+
+- same transport MessageId, same body: the loser is a replay and is ACKed, with no second job
+  or receipt (`InboxTests.LosingAReceiptRaceToTheSameDeliveryIsAcceptedWithoutASecondJob`);
+- a republish (new MessageId, same EventId) losing on the job key has no receipt of its own, so
+  it is **not** ACKed; its redelivery adds a receipt to the winner's job
+  (`InboxTests.LosingAJobKeyRaceToARepublishIsNotAckedUntilItsRedeliveryAddsAReceipt`);
+- the same poison message quarantined twice at once yields one quarantine row and one
+  dead-letter event (`InboxTests.LosingAQuarantineRaceIsTreatedAsAlreadyQuarantined`).
 
 ## What each window costs
 

@@ -20,11 +20,9 @@ public static class Program
     {
         if (args.Contains(InitializeDbArg, StringComparer.OrdinalIgnoreCase))
         {
-            // The bare flag is removed before configuration sees the arguments. The command-line
-            // configuration provider pairs a valueless "--key" with the NEXT token, so
-            // `--initialize-db --environment=Development` is read as
-            // initialize-db = "--environment=Development" and the environment is silently lost -
-            // which made this documented setup path fail the lab's own environment guard.
+            // The bare flag is removed before configuration sees the arguments: the command-line
+            // provider pairs a valueless "--key" with the NEXT token, so
+            // `--initialize-db --environment=Development` would silently lose the environment.
             var builder = Host.CreateApplicationBuilder(WithoutFlag(args, InitializeDbArg));
             LabEnvironmentGuard.EnsureLabEnvironment(builder.Environment, "Integration.Worker");
             using var loggerFactory = LoggerFactory.Create(logging => logging.AddConsole());
@@ -87,10 +85,7 @@ public static class Program
 
         // The receipt race path needs a fresh context after a failed transaction.
         // Scoped, not the default singleton: the factory resolves DbContextOptions, which
-        // AddDbContext registers as SCOPED. A singleton consuming a scoped service fails DI
-        // validation - and that validation is only enabled in Development, so this stayed
-        // invisible to the test suite (which runs as Testing) while breaking the documented
-        // `dotnet run` setup path.
+        // AddDbContext registers as scoped (CompositionTests validates the graph).
         builder.Services.AddDbContextFactory<LabDbContext>(options =>
             options.UseSqlServer(connectionString, sql =>
             {

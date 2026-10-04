@@ -121,6 +121,10 @@ rebuild cannot erase a business retry policy. See
 - .NET SDK **10.0.400** exactly (pinned in `global.json` with `rollForward: disable`)
 - Docker, with a working daemon — the tests start their own SQL Server and RabbitMQ
 - PowerShell **7+** (`pwsh`) for the scripts — Windows PowerShell 5.1 is not supported
+- On Windows, a clone at a **short path** (e.g. `C:\src\lab`). Under a directory about 150
+  characters deep, the native SQL client library in each app's `bin` exceeds the 260-character
+  path limit, and the crash/restart tests that start the apps as child processes fail with
+  `DllNotFoundException … (0x800700CE)`
 - Verified on Windows 11 with PowerShell 7.6.6 and Docker 29.6.1. No other platform has been tried.
 
 ## Setup
@@ -283,7 +287,7 @@ run that executed nothing is not a pass.
 | `ApiTests` | acceptance, atomicity, `problem+json` error contract |
 | `SchemaTests` | the invariants hold against raw SQL, not only handlers |
 | `OutboxTests` | confirm, return, nack, confirm-timeout, leases, crash recovery |
-| `InboxTests` | duplicates, quarantine reasons, ACK-after-commit |
+| `InboxTests` | duplicates, quarantine reasons, ACK-after-commit, concurrent-delivery races |
 | `JobRetryTests` | retry classification, schedule, attempt budget, restart |
 | `ExternalIdempotencyTests` | replay, conflict, concurrency, the lost response |
 | `DeadLetterTests` | terminal state, confirmed DLQ publish, payload safety |
@@ -329,10 +333,10 @@ These are limits of the lab, not open bugs:
 - **Fault injection exists only in `Testing`.** In `Development` the hooks are `NoOp`, so a
   stray configuration value cannot crash or stall a normal run.
 - **No reprocessing of quarantined messages.**
-- **CI has not been run remotely.** The workflow in `.github/workflows/ci.yml` is committed;
-  no green remote run is claimed until one exists.
-- **One machine, one OS.** Everything here was verified on Windows 11 with PowerShell 7.6.6 and
-  Docker 29.6.1. The scripts use no Windows-only API, but no other platform has been tried.
+- **Two platforms, one of each.** Local runs are on Windows 11 with PowerShell 7.6.6 and
+  Docker 29.6.1; the CI workflow (`.github/workflows/ci.yml`) runs the same suite on
+  `ubuntu-latest`. Which commit each run covers is recorded in
+  [results/verification.md](results/verification.md); no other platform has been tried.
 
 ## Licence
 

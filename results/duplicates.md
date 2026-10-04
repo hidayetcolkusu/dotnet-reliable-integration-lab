@@ -1,5 +1,9 @@
 # Duplicate delivery and quarantine
 
+> Recorded on 2026-09-11, before the repository had any commit (the first one is `8260ae8`,
+> 2026-09-13). The newest run pinned to a commit, from a fresh clone, is at the top of
+> [verification.md](verification.md).
+
 ## Environment
 
 | | |

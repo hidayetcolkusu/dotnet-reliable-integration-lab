@@ -1,5 +1,9 @@
 # Broker outage, unroutable publish, confirm timeout, crash after confirm
 
+> Recorded on 2026-09-11, before the repository had any commit (the first one is `8260ae8`,
+> 2026-09-13). The newest run pinned to a commit, from a fresh clone, is at the top of
+> [verification.md](verification.md).
+
 ## Environment
 
 | | |
@@ -30,7 +34,7 @@ All 8 tests in `OutboxTests` pass.
 | `ConfirmTimeoutAgainstAFrozenBrokerKeepsTheRowPendingThenRecovers` | broker frozen, TCP open | `Pending` + `broker_confirm_timeout`, then recovers |
 | `CrashAfterConfirmRepublishesTheSameTransportMessageId` | process killed after the confirm | republish with the **same** message id; 1 receipt, 1 job |
 | `TwoDispatchersClaimDisjointRows` | two claimers | 5 rows, 5 distinct claims |
-| `TwoWorkersPublishEveryRowExactlyOnce` | two workers | every row `Published`, 1 receipt, 1 job each |
+| `TwoWorkersPublishEveryRowExactlyOnce` (since renamed `TwoCompetingWorkersPublishEachRowOnce`) | two workers | every row `Published`, 1 receipt, 1 job each |
 | `StaleLeaseOwnerCannotMarkPublished` | lease expiry | the stale owner's update affects 0 rows |
 
 ## The application defect this produced

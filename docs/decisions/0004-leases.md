@@ -92,8 +92,8 @@ schedules are never compared across two machines' clocks.
 ## Evidence
 
 - `OutboxTests.TwoDispatchersClaimDisjointRows`
-- `OutboxTests.TwoWorkersPublishEveryRowExactlyOnce`
+- `OutboxTests.TwoCompetingWorkersPublishEachRowOnce`
 - `OutboxTests.StaleLeaseOwnerCannotMarkPublished`
 - `OutboxTests.CrashAfterConfirmRepublishesTheSameTransportMessageId`
 - `JobRetryTests.ACrashInsideAnAttemptStillConsumesThatAttempt`
-- `RecoveryTests.EveryDependencyFailingAtOnceStillAppliesEachRequestExactlyOnce`
+- `RecoveryTests.EveryDependencyFailingAtOnceStillAppliesEachRequestOnce`

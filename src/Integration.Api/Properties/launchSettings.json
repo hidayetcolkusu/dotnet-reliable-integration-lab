@@ -2,11 +2,10 @@
   "profiles": {
     "Integration.Api": {
       "commandName": "Project",
-      "launchBrowser": true,
+      "launchBrowser": false,
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
-      },
-      "applicationUrl": "https://localhost:53357;http://localhost:53358"
+      }
     }
   }
 }

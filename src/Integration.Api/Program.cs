@@ -84,10 +84,7 @@ public static class Program
 
         // The duplicate-acceptance path needs a fresh context after a failed transaction.
         // Scoped, not the default singleton: the factory resolves DbContextOptions, which
-        // AddDbContext registers as SCOPED. A singleton consuming a scoped service fails DI
-        // validation - and that validation is only enabled in Development, so this stayed
-        // invisible to the test suite (which runs as Testing) while breaking the documented
-        // `dotnet run` setup path.
+        // AddDbContext registers as scoped (CompositionTests validates the graph).
         builder.Services.AddDbContextFactory<LabDbContext>(options =>
             options.UseSqlServer(connectionString, sql =>
             {

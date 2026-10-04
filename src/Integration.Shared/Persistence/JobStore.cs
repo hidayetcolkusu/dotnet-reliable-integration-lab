@@ -182,10 +182,8 @@ public sealed class JobStore
             }
         }
 
-        // Committed only once the reader is closed. Committing while a DataReader is still open
-        // on the same connection throws, and it did: with no due job the claim threw on EVERY
-        // poll, so an idle worker sat in an error-and-backoff loop instead of waiting quietly.
-        // The tests never saw it because they always had work for the processor to find.
+        // Committed only once the reader is closed: committing while a DataReader is still open
+        // on the same connection throws (JobRetryTests covers the idle-worker case).
         if (!claimedARow)
         {
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);

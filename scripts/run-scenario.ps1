@@ -469,7 +469,7 @@ try {
             $applied = Get-LabAppliedCount -RequestId $requestId
             if ($applied -ne 1) { throw "Expected exactly ONE applied export but found $applied." }
 
-            Write-LabEvidence -RequestId $requestId -Message "retried $attempts times, applied exactly once: $(Get-LabState -RequestId $requestId)"
+            Write-LabEvidence -RequestId $requestId -Message "retried $attempts times, applied once: $(Get-LabState -RequestId $requestId)"
         }
 
         'poison-message' {
@@ -558,7 +558,7 @@ try {
             if ($applied -ne 1) { throw "Expected exactly ONE applied export after the restart but found $applied." }
 
             $total = Get-LabJobAttempts -RequestId $requestId
-            Write-LabEvidence -RequestId $requestId -Message "continued from attempt $afterKill to $total and applied exactly once: $(Get-LabState -RequestId $requestId)"
+            Write-LabEvidence -RequestId $requestId -Message "continued from attempt $afterKill to $total and applied once: $(Get-LabState -RequestId $requestId)"
         }
     }
 

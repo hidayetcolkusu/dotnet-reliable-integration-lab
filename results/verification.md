@@ -5,8 +5,217 @@ This file keeps every acceptance run, newest first. An older run is evidence of 
 
 | Run | Tests | What it covered |
 |---|---|---|
+| 2026-10-04 | 182 passed, 0 failed (fresh clone of `c94ac50`); 186 passed, 0 failed with the launch-profile fix | the first run pinned to a commit: a fresh clone, the README setup path, `broker-down`; remote CI green on the same commit |
 | 2026-09-13 | 182 passed, 0 failed | after the gap remediation (G1–G8) |
 | 2026-09-11 | 98 passed, 0 failed | the first full run, before the remediation |
+
+---
+
+# Run 2026-10-04 — a fresh clone of `c94ac50`
+
+The two runs below were made on working trees before the repository had a commit. This one
+starts from a commit. The repository was cloned into an empty directory, so no `.env`, `bin/`,
+`obj/` or `TestResults/` came along, and the documented chain and the documented setup ran there.
+
+## Environment
+
+| | |
+|---|---|
+| Date | 2026-10-04, 12:22–13:00 UTC |
+| Commit | `c94ac503c7246fa70b90558ef03c1fee3f055627` (`main`, equal to `origin/main` at the time of the run) |
+| Checkout | `git clone --no-local` into `%TEMP%\lrl-clean`, a directory that did not exist before |
+| .NET SDK | 10.0.400 (pinned in `global.json`, `rollForward: disable`) |
+| PowerShell | 7.6.6 |
+| Docker | 29.6.1 |
+| OS | Windows 11 Pro, build 10.0.26200 |
+| SQL Server | `mcr.microsoft.com/mssql/server:2022-latest@sha256:97b4488…` |
+| RabbitMQ | `rabbitmq:4.3.5-management-alpine@sha256:b3b8b7f9…` |
+
+## What changed since the last run
+
+The 2026-09-13 run was made on an uncommitted tree. Since then the tree has been committed
+(`8260ae8`), followed by three commits. **None of them changes application code**:
+
+| Commit | Kind | What it fixed |
+|---|---|---|
+| `fc3ec80` | repository hygiene | `.gitattributes` and `.editorconfig` pin line endings, so `dotnet format --verify-no-changes` gives the same answer on Linux and on Windows |
+| `cd2c902` | test infrastructure | xUnit ran test *collections* in parallel, so the pure test classes competed with the `lab` collection for CPU, and the timing-sensitive lab tests (attempt budgets, leases, lost-response retry) depended on that competition. All collections now run sequentially. |
+| `c94ac50` | test infrastructure | outbox rows left behind by an earlier test (a crashed process, a confirm that never came) could be claimed by the dispatcher of a later test. Tests that drive the dispatcher now clear them first, and the dead-letter test waits until the worker has declared its binding before it publishes. |
+
+An earlier run after these commits exists as a TRX file:
+a TRX file in the local `TestResults/` (not committed), 182/182, 2026-09-14 00:36 local time.
+It ran on the development working tree, **not** on a fresh clone, so it is not presented as
+this run.
+
+## The acceptance chain in the fresh clone
+
+| Command | Exit code | Result |
+|---|---|---|
+| `dotnet --version` | 0 | `10.0.400` |
+| `dotnet tool restore` | 0 | `dotnet-ef` 10.0.12 |
+| `dotnet restore --locked-mode` | 0 | the lock files were not modified |
+| `dotnet build -c Release --no-restore` | 0 | 0 warnings, 0 errors |
+| `dotnet test -c Release --no-build --logger "trx;LogFileName=clean-checkout.trx" --results-directory TestResults` | 0 | **182 passed, 0 failed, 0 skipped**, 3 min 7 s |
+| `dotnet format --verify-no-changes --no-restore` | 0 | no changes |
+
+`git status --short` in the clone was empty afterwards. The test project uses VSTest
+(`Microsoft.NET.Test.Sdk` + `xunit.runner.visualstudio`), so the TRX flag is `--logger trx`,
+the same flag the CI workflow uses.
+
+### Two earlier attempts that did not count
+
+Both attempts are recorded because both of them failed, and neither failure came from the commit:
+
+1. **Attempt 1: 86 passed, 96 failed.** All 96 failures were in the `lab` collection and had
+   a single cause. Docker refused to start the fixture's container with `failed to bind host
+   port 0.0.0.0:50076/tcp: address already in use`, so `LabFixture.InitializeAsync` threw and
+   every test in the collection failed with it. Another project's containers were starting on
+   the same machine at the same moment. The failure was not reproduced on any later run.
+2. **Attempt 2, in the same clone: 179 passed, 3 failed**
+   (`RecoveryTests.ACrashBetweenTheRequestAndItsOutboxRowLeavesNoAcceptedWorkBehind`,
+   `RecoveryTests.TheSameRequestIdCanBeRetriedAfterACrashWithoutCreatingASecondExport`,
+   `FailureWindowTests.TheExternalSystemStillReplaysTheSameReceiptAfterAProcessRestart`).
+   These are the tests that run the apps as **child processes** from each app's own `bin`.
+   The child output showed `DllNotFoundException: Microsoft.Data.SqlClient.SNI.dll …
+   (0x800700CE)`: the file name was too long. The first clone sat under a directory about
+   150 characters deep, and the native SNI library under
+   `src\…\bin\Release\net10.0\runtimes\win-x64\native\` went past the 260-character Windows
+   path limit. The same three tests passed in the development tree, and they passed in a
+   clone at a short path (`%TEMP%\lrl-clean`, the run recorded above). The README now
+   documents this requirement.
+
+## The README setup path in the fresh clone
+
+The development containers are called `lab-sql` and `lab-rabbit` (the names are fixed in
+`compose.yaml`, and the scripts use `docker exec lab-sql`), so a second checkout on the same
+machine cannot run its own lab next to them. To keep this run off the development
+databases and broker:
+
+- the two development containers were stopped already, and were only **renamed** for the
+  duration of the run (never started, never removed, and their volumes were not touched);
+- the clone ran under its own compose project (`docker compose -p lrl-clean up -d`), so its
+  volumes were `lrl-clean_*`, on its own ports (SQL 21433, AMQP 25672, management 25673);
+- `init-lab.ps1` writes to the per-user user-secrets store, which every checkout of this repo
+  shares. The three `secrets.json` files were backed up first and restored afterwards; their
+  SHA-256 hashes matched the originals.
+
+After the run, the compose project was removed with `down -v`, the containers got their
+names back, and no `lab-scn*` container was left.
+
+| Step | Exit code | Result |
+|---|---|---|
+| `cp .env.example .env` (ports and passwords edited) | — | |
+| `docker compose -p lrl-clean up -d --wait` | 0 | both services healthy |
+| `pwsh -File scripts/init-lab.ps1` | 0 | `IntegrationLab: 6 tables`, `FakeErpLab: 1 table`, user-secrets written |
+| the three `dotnet run` commands from the README | — | **failed: see below** |
+
+### What the fresh clone exposed
+
+The documented `dotnet run` path did not work from a fresh clone. In the development tree, the
+environment had always been supplied from outside:
+
+| # | Symptom | Cause |
+|---|---|---|
+| D1 | the worker exits: `Integration.Worker refuses to start in environment 'Production'` | the worker had no `launchSettings.json`, so `dotnet run` started it as Production, and the lab's environment guard refuses Production |
+| D2 | the API listens on `https://localhost:53357` and `http://localhost:53358`; the README's `http://127.0.0.1:5099` is refused | the tracked `launchSettings.json` set `applicationUrl`, which overrides `Program.DefaultLoopbackUrl` |
+| D3 | FakeErp listens on `localhost:53359/53360`; the worker's `ErpBaseAddress` (`http://127.0.0.1:5199`) is refused | the same, in FakeErp's `launchSettings.json` |
+
+The fix is the smallest one that removes the second source of truth. The two web profiles no
+longer set `applicationUrl` (or `launchBrowser`), and the worker gets a profile that sets
+`DOTNET_ENVIRONMENT=Development`. Two tests in `ScriptTests` pin this:
+`DotnetRunStartsEachAppInDevelopmentOnItsDocumentedUrl` (one case per app) and
+`TheWorkerCallsFakeErpWhereFakeErpListensByDefault`. With the committed launch profiles
+restored, three of the four cases fail with exactly D1–D3; with the fix, all four pass.
+
+With the fix copied into the clone, the same three commands, started one after another:
+
+```text
+FakeErp:  Now listening on: http://127.0.0.1:5199   Hosting environment: Development
+Worker:   integration-worker-host-ready            Hosting environment: Development
+API:      Now listening on: http://127.0.0.1:5099   Hosting environment: Development
+
+POST /api/exports -> 202 Location=/api/exports/7a107b99-5b4c-4682-ae73-b71fbd55b67f
+requestId=7a107b99-... publish=Published/attempts=1 job=Completed/attempts=1
+                       receipt=ERP-3930aa3decf04602ab64c5cb627bbe55 deadLetter=null
+```
+
+### `broker-down`, from the fresh clone
+
+`pwsh -File scripts/run-scenario.ps1 -Scenario broker-down`, exit code 0:
+
+```text
+==> Scenario 'broker-down' (run 39806229, topology prefix 'scn39806229-')
+    databases: IntegrationLab_scn39806229, FakeErpLab_scn39806229
+    broker container: lab-scn39806229-rabbit (amqp 64686, management 64687)
+    [requestId=a28ca3eb-...] API answered 202 with the broker DOWN
+    [requestId=a28ca3eb-...] outbox=Pending (durable, waiting for the broker)
+    [requestId=a28ca3eb-...] outbox=Publishing while the broker is down (never Published)
+    [requestId=a28ca3eb-...] outbox=Published after the broker returned
+    [requestId=a28ca3eb-...] final: outbox=Published, job=Completed/attempts=1, receipts=1, applied=1
+==> Scenario 'broker-down' completed as expected.
+==> Removing this run's RabbitMQ container
+==> Removing this run's databases
+```
+
+The scenario passes its own processes their URLs on the command line, so D1–D3 do not
+affect it.
+
+## The suite with the fix
+
+On the development tree at `c94ac50` with the launch-profile fix and the new tests on top:
+
+| Command | Exit code | Result |
+|---|---|---|
+| `dotnet restore --locked-mode` | 0 | |
+| `dotnet build -c Release --no-restore` | 0 | 0 warnings, 0 errors |
+| `dotnet test -c Release --no-build` | 0 | **186 passed, 0 failed, 0 skipped** (`ScriptTests` 26 → 30), 3 min 42 s |
+| `dotnet format --verify-no-changes --no-restore` | 0 | no changes |
+
+## Remote CI
+
+**Green on `c94ac50`.** This was read on 2026-10-04 with `gh` (2.102.0), as the repository owner:
+`gh run view`, the run's jobs endpoint and `gh run view --log`.
+
+| | |
+|---|---|
+| Run | [34765658412](https://github.com/hidayetcolkusu/dotnet-reliable-integration-lab/actions/runs/34765658412), workflow `ci`, attempt 1, event `push` |
+| Commit | `c94ac503c7246fa70b90558ef03c1fee3f055627` (`main`), the commit cloned above |
+| Time | 2026-09-13 15:27:32 → 15:32:10 UTC |
+| Conclusion | **success**: `build-and-test` success, `scripts` success |
+| Runner | `ubuntu-latest`, image `ubuntu-24.04`, version 20260907.300.1 |
+| Versions | .NET SDK 10.0.400, Docker 28.0.4 |
+| Build | 0 warnings, 0 errors |
+| Tests | **182 total, 182 passed**, 2.78 min, real SQL Server and RabbitMQ from the pinned digests (both pre-pulled in the run) |
+| Format | `dotnet format --verify-no-changes` passed |
+
+The test count comes from the run's log. The TRX artifact (`test-results`, ID 10320650996)
+was uploaded, but it is no longer listed: the workflow keeps it for 14 days.
+
+The three runs before it on `main` were **red**, and they are part of the record:
+
+| Run | Commit | Conclusion |
+|---|---|---|
+| 34755437613 | `8260ae8` | failure |
+| 34756462241 | `fc3ec80` | failure |
+| 34764078057 | `cd2c902` | failure: `DeadLetterTests.AQuarantinedMessageProducesOneDeadLetterEventWithoutItsRawBody` and `RecoveryTests.EveryDependencyFailingAtOnceStillAppliesEachRequestExactlyOnce` timed out waiting on outbox rows that stayed `Pending` |
+
+That last failure is the one `c94ac50` fixed: earlier tests left outbox rows behind, and they
+got in the way of the dispatcher. The fix is in the test infrastructure.
+
+The launch-profile fix and the new `ScriptTests` cases are **not** covered by any CI run yet.
+
+## What this run does not prove
+
+- **CI covers `c94ac50` only.** No CI run exists for anything after it.
+- **The launch-profile fix is not part of `c94ac50`.** The 182/182 fresh-clone run is of
+  `c94ac50` exactly. The 186/186 run and the working README path include the fix as
+  uncommitted changes on top of it.
+- **Only one scenario ran from the fresh clone** (`broker-down`). The other four last ran on
+  2026-09-13 (below).
+- **One machine, one OS.** Windows 11 with PowerShell 7.6.6.
+- **No performance data.**
+- **The windows listed as open in [failure-windows.md](../docs/architecture/failure-windows.md)
+  are still open.**
 
 ---
 

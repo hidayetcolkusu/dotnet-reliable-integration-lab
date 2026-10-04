@@ -1,7 +1,7 @@
 # Local dependencies only. The API, worker and FakeErp are started with
 # `dotnet run` from separate terminals so their process lifetime is visible.
 #
-# Image digests must match config/lab-images.json. ImageDigestTests verifies this.
+# Image digests must match config/lab-images.json. ScriptTests.ComposeAndLabImagesAgreeOnEveryPinnedDigest verifies this.
 name: dotnet-reliable-integration-lab
 
 services:

@@ -111,7 +111,7 @@ public sealed class RecoveryTests(LabFixture fixture)
     }
 
     [Fact]
-    public async Task EveryDependencyFailingAtOnceStillAppliesEachRequestExactlyOnce()
+    public async Task EveryDependencyFailingAtOnceStillAppliesEachRequestOnce()
     {
         await _sql.ParkAbandonedJobsAsync();
         await _sql.CleanupAbandonedOutboxAsync();

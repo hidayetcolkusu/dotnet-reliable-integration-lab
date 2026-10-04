@@ -10,8 +10,11 @@ Rules these files follow:
   produces alarming log lines on purpose; those are not defects.
 - **No performance claims.** Nothing here measures throughput, latency percentiles or loss
   rates, so none are stated.
-- **No remote CI claim.** `.github/workflows/ci.yml` exists; until a remote run is green, that
-  is all that is claimed. Everything recorded here was run locally, on one machine.
+- **CI claims are tied to a run.** The only CI claim is
+  [run 34765658412](https://github.com/hidayetcolkusu/dotnet-reliable-integration-lab/actions/runs/34765658412):
+  green on `c94ac50`, 182/182 on `ubuntu-24.04`. It is recorded, along with the red runs
+  before it, in [verification.md](verification.md). Every other result here was run locally,
+  on one machine.
 
 | File | What it records |
 |---|---|

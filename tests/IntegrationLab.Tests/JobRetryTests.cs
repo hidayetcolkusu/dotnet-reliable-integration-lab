@@ -371,7 +371,7 @@ public sealed class JobRetryTests(LabFixture fixture)
         Assert.Single(await _sql.GetJobAttemptsAsync(requestId));
         Assert.Equal(0, await _sql.CountAppliedExportsAsync(requestId));
 
-        // The expired lease is the recovery path; the work still finishes exactly once.
+        // The expired lease is the recovery path; the work still finishes with one effect.
         await using var restarted = await TestWorkerHost.StartAsync(
             fixture, erp.BaseAddress, null, FastRetryArgs("--Lab:JobLeaseSeconds=1"));
 

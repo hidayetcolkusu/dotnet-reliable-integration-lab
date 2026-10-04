@@ -5,7 +5,7 @@ namespace FakeErp;
 
 /// <summary>
 /// The external system's durable idempotency record: one row per operation key, forever.
-/// This table is what makes "the external effect happened exactly once" survivable when a
+/// This table is what keeps the external effect single when a
 /// response is lost - the replay returns the same receipt instead of applying again.
 /// </summary>
 public sealed class AppliedExport

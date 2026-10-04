@@ -216,17 +216,19 @@ public sealed class InboxAcceptor
         }
         catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
-            // Two deliveries of the same message raced on the receipt primary key.
-            // The failed transaction's context is dead; a fresh context reads the winner.
+            // Another delivery committed the same receipt or job key first. The failed inserts
+            // are still tracked as Added, so they are dropped before this context writes again.
+            _context.ChangeTracker.Clear();
             _logger.LogInformation(
                 "Receipt race for transport message {TransportMessageId}; resolving with a fresh context.",
                 transportId);
-            return await ResolveDuplicateRaceAsync(transportId!, payloadHash, cancellationToken).ConfigureAwait(false);
+            return await ResolveDuplicateRaceAsync(transportId!, body, payloadHash, cancellationToken).ConfigureAwait(false);
         }
     }
 
     private async Task<AcceptOutcome> ResolveDuplicateRaceAsync(
         string transportId,
+        ReadOnlyMemory<byte> body,
         string payloadHash,
         CancellationToken cancellationToken)
     {
@@ -246,12 +248,13 @@ public sealed class InboxAcceptor
                 return AcceptOutcome.Accepted;
             }
 
-            await QuarantineAsync(transportId, default, RejectionReason.IdentityPayloadMismatch, receipt.EventId, receipt.EventId, cancellationToken).ConfigureAwait(false);
+            await QuarantineAsync(transportId, body, RejectionReason.IdentityPayloadMismatch, receipt.EventId, receipt.EventId, cancellationToken).ConfigureAwait(false);
             return AcceptOutcome.Quarantined;
         }
 
-        // The winner rolled back or the row vanished: treat as failure, do not ACK;
-        // redelivery re-runs the whole acceptance logic.
+        // No receipt for this transport id: the conflict was on the job key, a different
+        // transport message for the same event (a republish) won. Do not ACK; the redelivery
+        // re-runs acceptance, finds that job and records this receipt against it.
         return AcceptOutcome.Failed;
     }
 
@@ -316,18 +319,19 @@ public sealed class InboxAcceptor
             body.Length,
             Data: null);
 
-        await _deadLetterWriter
-            .WriteForRejectionAsync(_context, rejection, envelope, cancellationToken)
-            .ConfigureAwait(false);
-
         try
         {
+            await _deadLetterWriter
+                .WriteForRejectionAsync(_context, rejection, envelope, cancellationToken)
+                .ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
-            // A concurrent delivery quarantined the same fingerprint first. Fine.
+            // A concurrent delivery committed the same fingerprint first. Its quarantine row
+            // and dead-letter event stand, so this delivery is already quarantined.
             await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            _context.ChangeTracker.Clear();
         }
     }
 
