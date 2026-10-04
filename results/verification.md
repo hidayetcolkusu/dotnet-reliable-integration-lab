@@ -5,9 +5,79 @@ This file keeps every acceptance run, newest first. An older run is evidence of 
 
 | Run | Tests | What it covered |
 |---|---|---|
+| 2026-10-04 (2) | 189 passed, 0 failed (fresh clone of `686d6cc`) | the release commit: the quarantine race fix, the two delivery-race tests, the launch-profile fix |
 | 2026-10-04 | 182 passed, 0 failed (fresh clone of `c94ac50`); 186 passed, 0 failed with the launch-profile fix | the first run pinned to a commit: a fresh clone, the README setup path, `broker-down`; remote CI green on the same commit |
 | 2026-09-13 | 182 passed, 0 failed | after the gap remediation (G1–G8) |
 | 2026-09-11 | 98 passed, 0 failed | the first full run, before the remediation |
+
+---
+
+# Run 2026-10-04 (2) — a fresh clone of `686d6cc`
+
+`686d6cc` is the commit that closes the 2026-10-04 review: the quarantine race fix, the
+deterministic delivery-race tests, the launch-profile fix and the wording fixes, all previously
+uncommitted on top of `c94ac50`. This run is of that commit and nothing else.
+
+## Environment
+
+| | |
+|---|---|
+| Date | 2026-10-04, 13:31:48–13:35:24 UTC |
+| Commit | `686d6ccc6b02f8816fc385766d0cd3941aa3715d` (`main`, local; not yet pushed at the time of the run) |
+| Checkout | `git clone --no-local` into `%TEMP%\lrl-clean-686d6cc`, a directory that did not exist before; `git status --short --ignored` was empty before the run |
+| .NET SDK | 10.0.400 |
+| PowerShell | 7.6.6 |
+| Docker | 29.6.1 |
+| OS | Windows 11 Pro, build 10.0.26200 |
+| SQL Server | `mcr.microsoft.com/mssql/server:2022-latest@sha256:97b448857967be55e005424a660056fe6d51814435804dc07e8f79f028bab5fb` |
+| RabbitMQ | `rabbitmq:4.3.5-management-alpine@sha256:b3b8b7f95f5382a19f9ea33540e604f30aad081d37ad9aba72255135765373a1` |
+
+Both images come from `compose.yaml` through `LabImages` and are started by Testcontainers
+(`MsSqlBuilder`, `RabbitMqBuilder`); no test substitutes an in-memory store or broker.
+
+## The acceptance chain in the fresh clone
+
+`pwsh -File scripts/verify-clean.ps1`, exit code **0**:
+
+| Step | Result |
+|---|---|
+| `dotnet tool restore` | `dotnet-ef` 10.0.12 |
+| `dotnet restore --locked-mode` | ok |
+| `dotnet build -c Release --no-restore` | 0 warnings, 0 errors |
+| `dotnet test -c Release` | **189 passed, 0 failed, 0 skipped** (TRX: `executed="189" passed="189" failed="0"`), 3 min 12 s |
+| `dotnet format --verify-no-changes` | no changes |
+
+`git status --short` in the clone was empty afterwards.
+
+## What is new in the count
+
+187 → 189: two regression tests for the inbox's concurrent-delivery races. Each one commits a
+competing delivery's job and receipt from a second connection inside a `SaveChangesInterceptor`,
+right before the acceptor's own insert, so the unique-key conflict happens on every run:
+
+| Test | Asserts |
+|---|---|
+| `InboxTests.LosingAReceiptRaceToTheSameDeliveryIsAcceptedWithoutASecondJob` | the loser returns `Accepted` (ACKable); 1 job, 1 receipt |
+| `InboxTests.LosingAJobKeyRaceToARepublishIsNotAckedUntilItsRedeliveryAddsAReceipt` | the loser returns `Failed` (not ACKed); its redelivery returns `Accepted`; 1 job, 2 receipts |
+
+Both were checked against deliberately broken production code on the development tree, and
+the second test failed each time: (1) the job-key loser returning `Accepted` (an ACK with
+nothing durable behind it); (2) the race handler no longer clearing the failed inserts from
+the change tracker. The production file was restored byte-for-byte after each check.
+
+The same chain on the development tree before the commit: 189 passed, exit code 0.
+
+## Not run in this clone
+
+- **The interactive README path** (`init-lab.ps1`, the three `dotnet run` commands,
+  `broker-down`). `init-lab.ps1` writes to the per-user user-secrets store that every checkout
+  shares, and the scenarios use the development `lab-sql` container; neither was touched for
+  this run. The launch profiles that path depends on are covered inside the suite by
+  `ScriptTests.DotnetRunStartsEachAppInDevelopmentOnItsDocumentedUrl` and
+  `ScriptTests.TheWorkerCallsFakeErpWhereFakeErpListensByDefault`. The last time the path itself
+  ran end to end is the run below.
+- **Remote CI on this commit.** The commit had not been pushed when this was recorded, so no
+  CI run covers it here. The last green CI run is still the one on `c94ac50`, below.
 
 ---
 
